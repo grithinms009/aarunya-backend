@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: aarunya-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aarunya
+      POSTGRES_PASSWORD: aarunya_local_pw
+      POSTGRES_DB: aarunya
+    ports:
+      - '5433:5432'
+    volumes:
+      - aarunya_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U aarunya -d aarunya']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  aarunya_pgdata:
