@@ -16,6 +16,7 @@ import { sendCsv } from '../lib/csv.js';
 import { notFound, ruleError, wrap } from '../lib/errors.js';
 import { parseBody, parseQuery } from '../middleware/validate.js';
 import { NEXT_STEP } from '../lib/reference.js';
+import { nextOrderNo } from '../lib/orderno.js';
 
 export const router = Router();
 
@@ -267,18 +268,6 @@ const saleIn = z.object({
   phone: z.string().max(40).default(''),
   note: z.string().max(2000).default(''),
 });
-
-/** Next number in the channel's sequence: AJ1001… online, OS201… offline. */
-async function nextOrderNo(c, channel) {
-  const prefix = channel === 'online' ? 'AJ' : 'OS';
-  const base = channel === 'online' ? 1000 : 200;
-  const { rows } = await c.query(
-    `SELECT COALESCE(max(NULLIF(regexp_replace(id, '\\D', '', 'g'), '')::bigint), $2) AS m
-       FROM "order" WHERE channel = $1`,
-    [channel, base],
-  );
-  return prefix + (Number(rows[0].m) + 1);
-}
 
 router.post('/offline-sales', parseBody(saleIn), wrap(async (req, res) => {
   const input = req.body;

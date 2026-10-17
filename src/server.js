@@ -32,6 +32,7 @@ import { router as returnRoutes } from './routes/returns.js';
 import { router as customerRoutes } from './routes/customers.js';
 import { router as settingsRoutes } from './routes/settings.js';
 import { router as contentRoutes } from './routes/storefront.js';
+import { router as mediaRoutes, UPLOAD_DIR } from './routes/media.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -63,7 +64,6 @@ app.use(express.json({ limit: '12mb' }));
 app.use(cookieParser());
 app.use(morgan('tiny'));
 app.use(readSession);
-app.use(csrfGuard);
 
 /* A broad ceiling on the whole API; /auth/login is throttled far harder in its router. */
 app.use('/api', rateLimit({
@@ -71,6 +71,14 @@ app.use('/api', rateLimit({
   limit: 600,
   standardHeaders: true,
   legacyHeaders: false,
+}));
+
+/* Uploaded images, served read-only. Long-lived because every file name is unique. */
+app.use('/uploads', express.static(UPLOAD_DIR, {
+  maxAge: '30d',
+  immutable: true,
+  index: false,
+  dotfiles: 'deny',
 }));
 
 app.get('/health', async (_req, res) => {
@@ -82,11 +90,16 @@ app.get('/health', async (_req, res) => {
   }
 });
 
-app.use('/api/auth', authRoutes);
+/* CSRF applies to the surfaces that act on the session. The public storefront routes
+   below are anonymous — they never read req.user — so a session cookie riding along
+   (localhost shares cookies across ports, and so would a shared parent domain) must not
+   turn an ordinary shopper request into a forbidden one. */
+app.use('/api/auth', csrfGuard, authRoutes);
 app.use('/api', publicRoutes);
 
 /* Everything below needs a signed-in admin. */
 const admin = express.Router();
+admin.use(csrfGuard);
 admin.use(requireRole('admin'));
 admin.use('/meta', metaRoutes);
 admin.use('/dashboard', dashboardRoutes);
@@ -98,6 +111,7 @@ admin.use('/returns', returnRoutes);
 admin.use('/customers', customerRoutes);
 admin.use('/settings', settingsRoutes);
 admin.use('/storefront-content', contentRoutes);
+admin.use('/uploads', mediaRoutes);
 app.use('/api/admin', admin);
 
 app.use(notFoundHandler);

@@ -23,12 +23,21 @@ docker compose up -d     # PostgreSQL 16 on localhost:5433
 npm install
 cp .env.example .env     # then set a real JWT_SECRET
 npm run db:migrate       # apply the schema
-npm run db:seed          # load the demo catalogue
+npm run db:seed          # create the two accounts and default settings
 npm run dev              # http://localhost:4000
 ```
 
 `npm run db:reset` drops and rebuilds everything, then reseeds — the quickest way back to a
 known state.
+
+**The store starts empty.** No products, categories, colours or home-page content are
+created: all of it is added through the admin panel, which is the only way it should ever
+arrive. The seed writes just the two accounts and the store's default settings, because the
+app cannot run without somewhere to sign in and a shipping rule.
+
+First run, in this order: **Settings → add your colours**, then **Categories → add a
+category**, then **Products → add a product**. A product needs a category and at least one
+colour to exist first.
 
 ### Accounts seeded
 
@@ -58,11 +67,15 @@ session gets a 403 there. Change these before anything is deployed.
 npm test     # resets the database, then checks every business rule against the live API
 ```
 
-It covers order numbering, the stock and ledger invariants, the order-flow guards, adjustment
-clamping, product validation, the return state machine and its stock effects, and the auth
-rules (role guard, CSRF, signed-out and wrong-password refusals). These checks came from
-`aarunya-admin`'s `check:rules`, which ran them against the browser mock before this API
-existed.
+The store starts empty, so the suite builds everything it needs through the public and admin
+APIs — colours, a category, products, a storefront order — and then exercises the rules
+against it. The create paths are therefore covered too: if adding a category or a product
+breaks, this fails before it ever reaches a rule.
+
+80 checks, covering order numbering, the stock and ledger invariants, the order-flow guards,
+cart re-pricing, checkout totals and oversell protection, delivery estimates, adjustment
+clamping, product validation, the return state machine and its stock effects, uploads
+(including a file disguised as an image), and the auth rules.
 
 ## Layout
 
@@ -72,11 +85,11 @@ src/
   db/
     schema.sql       the whole schema, one file
     migrate.js       applies it (--reset drops first)
-    seed.js          loads the demo dataset and the two accounts
-    seed-source.mjs  GENERATED — the admin prototype's own seed builder, bundled
+    seed.js          creates the two accounts and the default settings
     pool.js          pg pool + tx() helper
   lib/
     stock.js         applyStock() — the single point of stock mutation
+    orderno.js       the AJ…/OS… sequences, shared by checkout and the POS
     repo.js          row → DTO assembly, the shapes the admin is written against
     settings.js      typed facade over the `setting` table
     reference.js     the fixed vocabularies, defined once and served to the admin
@@ -88,8 +101,8 @@ src/
     validate.js      zod body and query parsing
     error.js         one JSON error shape for the whole API
   routes/            one file per resource
-test/rules.test.mjs  the business-rule suite
-scripts/gen-seed.sh  regenerates seed-source.mjs from aarunya-admin
+test/rules.test.mjs  the end-to-end suite
+uploads/             images written by the media route (gitignored)
 ```
 
 ## Reference data
@@ -122,10 +135,11 @@ diverge. The ledger is append-only and survives the product being deleted.
 Order items are snapshots (name, colour, SKU, price, image), so deleting a product never
 rewrites order history.
 
-The demo dataset comes from `db/seed-source.mjs`, bundled straight from the admin prototype's
-own seed builder, so a freshly seeded database shows exactly what the prototype showed.
-Regenerate it with `scripts/gen-seed.sh` when that seed changes. Dates are computed at run
-time, so a fresh seed always lands in the last 40 days.
+Product photos, category cards and banner artwork are posted to `POST /api/admin/uploads`,
+written under `UPLOAD_DIR` and served read-only from `/uploads`. The database stores only the
+URL, so rows stay small and the files can move behind a CDN later by changing one module.
+Uploads are checked server-side: the declared type against an allow-list, the real magic
+bytes, and the decoded size.
 
 ## Security
 
@@ -152,12 +166,20 @@ time, so a fresh seed always lands in the last 40 days.
 ### Public
 
 ```
-GET  /api/storefront                  config, banners, visible offers, announcements,
-                                      categories, colours, return policy
-GET  /api/products?category=&type=&color=&price=&sale=&instock=&q=&sort=
-GET  /api/products/{slug}             active products only
-GET  /api/categories
+GET  /storefront              config, banners, visible offers, announcements, categories,
+                              colours, category pairings, return policy
+GET  /products?category=&type=&color=&price=&sale=&instock=&q=&sort=
+GET  /products/{slug}         active products only
+GET  /categories
+POST /cart                    re-prices and re-checks stock, returns totals
+POST /orders                  places an order, reserves stock, payment pending
+GET  /orders/{orderNo}/status for the thank-you page
+GET  /delivery/estimate?pin=  working days, from the store's settings
+POST /payments/create         reports GATEWAY_NOT_CONFIGURED until a provider is wired
 ```
+
+Totals are never taken from the client: the cart is re-priced from the catalogue and the
+order total recomputed from the store's own settings before anything is written.
 
 ### Auth
 
@@ -197,6 +219,7 @@ returns    GET  /returns (tab, type, q) · GET /returns/{returnNo} · GET /retur
 customers  GET  /customers · GET /customers/export.csv
 settings   GET  /settings · GET /settings/colors-in-use · PUT /settings
 content    GET  /storefront-content · PUT /storefront-content
+uploads    POST /uploads  { data, purpose } → { url } · DELETE /uploads { url }
 ```
 
 Every list endpoint returns the exact shapes in `aarunya-admin/src/data/types.ts`, which is
@@ -206,13 +229,11 @@ why connecting the admin needed no screen changes.
 
 These were out of scope for this pass and are the obvious next steps:
 
-- **Payments.** No gateway. Orders carry a payment status that an admin sets by hand; the
-  webhook endpoint and the Razorpay adapter in the architecture doc are not here.
-- **Object storage for images.** Uploads are still resized in the browser and stored as data
-  URLs, which is why `express.json` accepts 12 MB bodies. The doc's signed-upload flow and
-  CDN renditions would replace that.
-- **Transactional email.** Password-reset tokens are logged, not sent.
-- **Customer accounts on the storefront.** The `user` role exists and can sign in, but no
-  public cart or checkout endpoint writes orders yet.
-- **The storefront wiring.** `aarunya-web` still runs on its own mock; `GET /api/storefront`
-  is ready for it.
+- **Payments.** No gateway is connected. `POST /payments/create` reports
+  `GATEWAY_NOT_CONFIGURED` rather than pretending a payment succeeded, and an admin marks an
+  order paid by hand. The webhook endpoint and the Razorpay adapter are still to come.
+- **Transactional email.** Password-reset tokens are logged, not sent; wire an SMTP provider.
+- **Customer accounts on the storefront.** The `user` role exists and can sign in, but
+  checkout is still anonymous — there is no order history for shoppers yet.
+- **Image renditions and a CDN.** Uploads are stored at one size on local disk. Thumbnails
+  and remote storage would change only `routes/media.js`.

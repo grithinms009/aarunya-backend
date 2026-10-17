@@ -38,7 +38,9 @@ router.get('/colors-in-use', wrap(async (_req, res) => {
 }));
 
 const saveIn = z.object({
-  config: z.record(z.union([z.string(), z.boolean(), z.number()])).default({}),
+  /* Accepts the whole config object GET returns, nested arrays and all. Only the keys
+     listed in the handler below are persisted, so unknown ones are simply ignored. */
+  config: z.record(z.unknown()).default({}),
   couriers: z.array(z.object({
     id: z.string().max(100).default(''),
     name: z.string().max(200).default(''),
