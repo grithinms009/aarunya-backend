@@ -263,6 +263,48 @@ const pay = await call('/api/payments/create', { method: 'POST', body: { orderId
 ok('payment reports no gateway', pay.status === 'GATEWAY_NOT_CONFIGURED', pay.status);
 ok('payment uses the server amount', pay.amount === 1798, String(pay.amount));
 
+section('order access is token-only');
+/* Order numbers are sequential, so they are not a secret. Only the token issued at
+   checkout may unlock an order, and a wrong one must look exactly like a missing one. */
+ok('checkout issues an access token', typeof placed.accessToken === 'string' && placed.accessToken.length >= 20);
+
+const noToken = await refuses(call(`/api/orders/${placed.orderId}/track`));
+ok('tracking without a token refused', noToken?.status === 422, String(noToken?.status));
+
+const badToken = await refuses(call(`/api/orders/${placed.orderId}/track?token=${'x'.repeat(32)}`));
+ok('tracking with a wrong token refused', badToken?.status === 404, String(badToken?.status));
+
+const wrongOrder = await refuses(
+  call(`/api/orders/AJ9999/track?token=${encodeURIComponent(placed.accessToken)}`));
+ok('a token does not unlock another order', wrongOrder?.status === 404, String(wrongOrder?.status));
+ok('a wrong token is indistinguishable from a missing order',
+  badToken?.status === wrongOrder?.status && badToken?.message === wrongOrder?.message);
+
+const tracked = await call(
+  `/api/orders/${placed.orderId}/track?token=${encodeURIComponent(placed.accessToken)}`);
+ok('the right token returns the order', tracked.orderId === placed.orderId);
+ok('tracking does not leak the full address',
+  !('address' in tracked) && !('phone' in tracked) && !('email' in tracked));
+
+const tooEarly = await refuses(call(
+  `/api/orders/${placed.orderId}/replacement-request?token=${encodeURIComponent(placed.accessToken)}`,
+  { method: 'POST', body: { reason: 'Arrived damaged' } }));
+ok('replacement refused before delivery', !!tooEarly, tooEarly?.message ?? 'allowed');
+
+section('contact form');
+const sent = await call('/api/contact', {
+  method: 'POST',
+  body: { name: 'Asha', email: 'asha@example.com', subject: 'Delivery', message: 'Do you ship to Kochi?' },
+});
+ok('message accepted', sent.ok === true && !!sent.id);
+const noName = await refuses(call('/api/contact',
+  { method: 'POST', body: { name: '', email: 'a@b.com', message: 'hi' } }));
+ok('message without a name refused', noName?.status === 422, String(noName?.status));
+const noReply = await refuses(call('/api/contact',
+  { method: 'POST', body: { name: 'Asha', message: 'hi' } }));
+ok('message with no way to reply refused', noReply?.status === 400, String(noReply?.status));
+ok('message reaches the admin', (await call('/api/admin/messages')).length >= 1);
+
 section('order flow');
 const pending = await refuses(call(`/api/admin/orders/${placed.orderId}/advance`,
   { method: 'POST', body: { courier: '', awb: '' } }));
@@ -288,6 +330,18 @@ await call(`/api/admin/orders/${placed.orderId}/advance`, { method: 'POST', body
 const delivered = await call(`/api/admin/orders/${placed.orderId}/advance`,
   { method: 'POST', body: { courier: '', awb: '' } });
 ok('order reaches delivered', delivered.status === 'delivered', delivered.status);
+
+section('replacement request after delivery');
+const asked = await call(
+  `/api/orders/${placed.orderId}/replacement-request?token=${encodeURIComponent(placed.accessToken)}`,
+  { method: 'POST', body: { reason: 'Arrived damaged', note: 'Clasp bent' } });
+ok('customer can request a replacement', asked.status === 'requested', asked.id);
+ok('it lands in the admin queue',
+  (await call('/api/admin/returns?tab=review')).rows.some((r) => r.id === asked.id));
+const twice = await refuses(call(
+  `/api/orders/${placed.orderId}/replacement-request?token=${encodeURIComponent(placed.accessToken)}`,
+  { method: 'POST', body: { reason: 'again' } }));
+ok('a second request on the same order is refused', !!twice, twice?.message ?? 'allowed');
 
 section('cancelling restores stock');
 const before = (await variantOf(gold.id)).stock;

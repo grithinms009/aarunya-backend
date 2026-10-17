@@ -167,8 +167,12 @@ CREATE TABLE "order" (
   location   TEXT NOT NULL DEFAULT '',
   note       TEXT NOT NULL DEFAULT '',
   return_id  TEXT,
+  -- Random, unguessable handle given to the shopper at checkout. Order details are only
+  -- ever returned to someone holding this, never to anyone who knows the order number.
+  access_token TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE INDEX ON "order" (access_token);
 CREATE INDEX ON "order" (created_at DESC);
 CREATE INDEX ON "order" (channel, status);
 CREATE INDEX ON "order" (cust_phone);
@@ -265,6 +269,21 @@ CREATE TABLE stock_ledger (
 );
 CREATE INDEX ON stock_ledger (at DESC);
 CREATE INDEX ON stock_ledger (variant_id, at DESC);
+
+-- Messages sent through the storefront's contact form.
+CREATE TABLE contact_message (
+  id         BIGSERIAL PRIMARY KEY,
+  name       TEXT NOT NULL,
+  email      TEXT NOT NULL DEFAULT '',
+  phone      TEXT NOT NULL DEFAULT '',
+  order_no   TEXT NOT NULL DEFAULT '',
+  subject    TEXT NOT NULL DEFAULT '',
+  message    TEXT NOT NULL,
+  ip         TEXT NOT NULL DEFAULT '',
+  handled_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX ON contact_message (created_at DESC);
 
 -- ---------------------------------------------------------------- storefront content
 

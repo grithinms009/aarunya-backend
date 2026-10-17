@@ -4,6 +4,7 @@
    Money is never trusted from the client: the cart is re-priced and the order total is
    recomputed from the catalogue and the store's settings before anything is written. */
 import { Router } from 'express';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { query, tx } from '../db/pool.js';
@@ -222,17 +223,20 @@ router.post('/orders', checkoutLimiter, parseBody(orderIn), wrap(async (req, res
     const { subtotal, shipping, giftFee, total } = totalsFor(lines, config, giftWrap);
 
     const id = await nextOrderNo(c, 'online');
+    /* The shopper's private handle on this order. Knowing the order number is not
+       enough to see it; this is what the tracking page asks for. */
+    const token = randomBytes(24).toString('base64url');
     const address = [customer.house, customer.address, customer.landmark]
       .map((x) => x.trim()).filter(Boolean).join(', ');
 
     await c.query(
       `INSERT INTO "order" (id, channel, status, cust_name, cust_phone, cust_email, address,
          city, state, pin, subtotal, shipping, gift_wrap, gift_fee, discount, total,
-         pay_status, pay_method, provider)
-       VALUES ($1,'online','new',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,0,$13,'pending','',$14)`,
+         pay_status, pay_method, provider, access_token)
+       VALUES ($1,'online','new',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,0,$13,'pending','',$14,$15)`,
       [id, customer.name, phone, customer.email, address, customer.city, customer.state,
        customer.pin, subtotal, shipping, giftWrap, giftFee, total,
-       config.PAYMENT_PROVIDER ?? null],
+       config.PAYMENT_PROVIDER ?? null, token],
     );
 
     let n = 0;
@@ -250,11 +254,17 @@ router.post('/orders', checkoutLimiter, parseBody(orderIn), wrap(async (req, res
       `INSERT INTO order_history (order_id, status, note) VALUES ($1,'new',$2)`,
       [id, 'Order placed on website'],
     );
-    return id;
+    return { id, token };
   });
 
-  const order = await loadOrder(orderNo);
-  res.status(201).json({ orderId: orderNo, status: 'CREATED', amount: order.total });
+  const order = await loadOrder(orderNo.id);
+  res.status(201).json({
+    orderId: orderNo.id,
+    status: 'CREATED',
+    amount: order.total,
+    /* Returned once, to the shopper who placed the order. Keep it to track the order. */
+    accessToken: orderNo.token,
+  });
 }));
 
 /* ---------------------------------------------------------------- delivery */
@@ -293,16 +303,184 @@ router.post('/payments/create', parseBody(z.object({
   });
 }));
 
-/** GET /orders/{orderNo}/status — lets the thank-you page confirm what was placed. */
-router.get('/orders/:orderNo/status', wrap(async (req, res) => {
-  const order = await loadOrder(req.params.orderNo);
-  if (!order) throw notFound('That order no longer exists');
-  res.json({
-    orderId: order.id,
-    status: order.status,
-    payment: order.payment.status,
-    amount: order.total,
-    placedAt: order.createdAt,
-    items: order.items.map((l) => ({ name: l.name, color: l.color, qty: l.qty, price: l.price })),
-  });
+/* ---------------------------------------------------------------- tracking */
+
+/** Constant-time compare, so a wrong token cannot be narrowed down by timing. */
+function tokenMatches(given, stored) {
+  if (!given || !stored) return false;
+  const a = Buffer.from(String(given));
+  const b = Buffer.from(String(stored));
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/* Tracking is a lookup against a secret, so it is throttled like one. */
+const trackLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'rate_limited', message: 'Too many attempts. Please try again shortly.' },
+});
+
+/**
+ * GET /orders/{orderNo}/track?token=…
+ *
+ * Returns only what the shopper needs to follow their parcel, and only to someone holding
+ * the access token issued at checkout. Knowing or guessing an order number is deliberately
+ * not enough: order numbers are sequential, so they are not a secret.
+ *
+ * A wrong token and a missing order give the same answer, so this cannot be used to work
+ * out which order numbers exist.
+ */
+router.get('/orders/:orderNo/track', trackLimiter,
+  parseQuery(z.object({ token: z.string().min(8).max(200) })),
+  wrap(async (req, res) => {
+    const { rows } = await query(
+      `SELECT o.*, s.courier, s.awb, s.shipped_at, r.id AS return_id, r.status AS return_status
+         FROM "order" o
+         LEFT JOIN shipment s ON s.order_id = o.id
+         LEFT JOIN return_request r ON r.id = o.return_id
+        WHERE o.id = $1`,
+      [req.params.orderNo],
+    );
+    const o = rows[0];
+    if (!o || !tokenMatches(req.valid.token, o.access_token)) {
+      throw notFound('We could not find an order with those details');
+    }
+
+    const { rows: items } = await query(
+      `SELECT name, color_key, qty, price FROM order_item WHERE order_id = $1 ORDER BY sort_order`,
+      [o.id],
+    );
+    const { rows: history } = await query(
+      `SELECT status, note, at FROM order_history WHERE order_id = $1 ORDER BY at`, [o.id]);
+
+    const courier = (config) => (config.couriers ?? []).find((c) => c.id === o.courier);
+    const settings = await getConfig();
+    const c = courier(settings);
+
+    res.json({
+      orderId: o.id,
+      status: o.status,
+      payment: o.pay_status,
+      placedAt: o.created_at,
+      total: o.total,
+      /* Enough to recognise the order, without reprinting the full address. */
+      name: o.cust_name,
+      city: o.city,
+      items: items.map((l) => ({ name: l.name, color: l.color_key, qty: l.qty, price: l.price })),
+      shipment: o.awb
+        ? {
+            courier: c?.name ?? o.courier ?? '',
+            awb: o.awb,
+            shippedAt: o.shipped_at,
+            trackingUrl: c?.url ? c.url.replace('{awb}', encodeURIComponent(o.awb)) : null,
+          }
+        : null,
+      returnRequest: o.return_id ? { id: o.return_id, status: o.return_status } : null,
+      history: history.map((h) => ({ status: h.status, note: h.note, at: h.at })),
+    });
+  }));
+
+/**
+ * POST /orders/{orderNo}/replacement-request?token=…
+ *
+ * Raises a replacement request from the storefront. It creates the same record the admin's
+ * "Log a request" modal does, so it lands in the existing returns queue for review — no
+ * stock moves and nothing is approved automatically.
+ */
+router.post('/orders/:orderNo/replacement-request', trackLimiter,
+  parseQuery(z.object({ token: z.string().min(8).max(200) })),
+  parseBody(z.object({
+    reason: z.string().trim().min(1, 'Tell us what went wrong').max(300),
+    note: z.string().trim().max(2000).default(''),
+    variantId: z.string().max(120).default(''),
+  })),
+  wrap(async (req, res) => {
+    const id = await tx(async (c) => {
+      const { rows } = await c.query(
+        `SELECT * FROM "order" WHERE id = $1 FOR UPDATE`, [req.params.orderNo]);
+      const o = rows[0];
+      if (!o || !tokenMatches(req.valid.token, o.access_token)) {
+        throw notFound('We could not find an order with those details');
+      }
+      if (o.return_id) throw ruleError('A request has already been raised for this order');
+      if (o.status !== 'delivered') {
+        throw ruleError('A replacement can be requested once the order has been delivered');
+      }
+
+      const { rows: items } = await c.query(
+        `SELECT * FROM order_item WHERE order_id = $1 ORDER BY sort_order`, [o.id]);
+      const item = items.find((l) => l.variant_id === req.body.variantId) ?? items[0];
+      if (!item) throw ruleError('That order has no items to return');
+
+      const { rows: maxRows } = await c.query(
+        `SELECT COALESCE(max(NULLIF(regexp_replace(id, '\\D', '', 'g'), '')::bigint), 300) AS m
+           FROM return_request`);
+      const rid = 'RX' + (Number(maxRows[0].m) + 1);
+
+      const { rows: dRows } = await c.query(
+        `SELECT at FROM order_history WHERE order_id = $1 AND status = 'delivered'
+          ORDER BY at DESC LIMIT 1`, [o.id]);
+
+      await c.query(
+        `INSERT INTO return_request (id, order_id, cust_name, cust_phone, item_pid, item_vid,
+           item_name, item_color, item_sku, item_qty, item_price, item_img, type, reason, note,
+           video, photos, delivered_at, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,1,$10,$11,'replacement',$12,$13,FALSE,0,$14,'requested')`,
+        [rid, o.id, o.cust_name, o.cust_phone, item.product_id ?? '', item.variant_id ?? '',
+         item.name, item.color_key, item.sku, item.price, item.img,
+         req.body.reason, req.body.note, dRows[0]?.at ?? o.created_at],
+      );
+      await c.query(
+        `INSERT INTO return_history (return_id, status, note)
+         VALUES ($1,'requested','Requested by the customer from the website')`, [rid]);
+      await c.query(`UPDATE "order" SET return_id = $2 WHERE id = $1`, [o.id, rid]);
+      return rid;
+    });
+
+    res.status(201).json({
+      id,
+      status: 'requested',
+      message: 'Thank you — we have your request and will be in touch.',
+    });
+  }));
+
+/* ---------------------------------------------------------------- contact */
+
+const contactLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'rate_limited', message: 'Too many messages. Please try again later.' },
+});
+
+/**
+ * POST /contact — the storefront's contact form.
+ *
+ * The message is stored so nothing is lost, and logged so it is visible to whoever is
+ * running the server. Email delivery needs an SMTP provider, which is not configured yet;
+ * until it is, the shop must check these rather than assume they arrive by mail.
+ */
+router.post('/contact', contactLimiter, parseBody(z.object({
+  name: z.string().trim().min(1, 'Please tell us your name').max(120),
+  email: z.string().trim().email('Enter a valid email address').max(200).or(z.literal('')).default(''),
+  phone: z.string().trim().max(20).default(''),
+  orderNo: z.string().trim().max(60).default(''),
+  subject: z.string().trim().max(200).default(''),
+  message: z.string().trim().min(1, 'Please write your message').max(4000),
+})), wrap(async (req, res) => {
+  const { name, email, phone, orderNo, subject, message } = req.body;
+  if (!email && !phone) {
+    throw badRequest('Please leave an email address or a phone number so we can reply');
+  }
+
+  const { rows } = await query(
+    `INSERT INTO contact_message (name, email, phone, order_no, subject, message, ip)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+    [name, email, phone, orderNo, subject, message, req.ip ?? ''],
+  );
+  console.log(`[contact] #${rows[0].id} from ${name} <${email || phone}> ${subject ? '— ' + subject : ''}`);
+  res.status(201).json({ ok: true, id: rows[0].id });
 }));

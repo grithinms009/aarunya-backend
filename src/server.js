@@ -33,6 +33,7 @@ import { router as customerRoutes } from './routes/customers.js';
 import { router as settingsRoutes } from './routes/settings.js';
 import { router as contentRoutes } from './routes/storefront.js';
 import { router as mediaRoutes, UPLOAD_DIR } from './routes/media.js';
+import { router as contactRoutes } from './routes/contact.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -112,6 +113,7 @@ admin.use('/customers', customerRoutes);
 admin.use('/settings', settingsRoutes);
 admin.use('/storefront-content', contentRoutes);
 admin.use('/uploads', mediaRoutes);
+admin.use('/messages', contactRoutes);
 app.use('/api/admin', admin);
 
 app.use(notFoundHandler);

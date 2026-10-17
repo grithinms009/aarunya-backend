@@ -22,7 +22,7 @@ const TABLES = [
   'order_history', 'shipment', 'order_item', '"order"',
   'variant_image', 'variant', 'product_spec', 'product',
   'category_pairing', 'sub_category', 'category', 'color',
-  'announcement', 'offer', 'banner', 'setting',
+  'announcement', 'offer', 'banner', 'setting', 'contact_message',
   'password_reset_token', 'login_attempt', 'app_user',
 ];
 
