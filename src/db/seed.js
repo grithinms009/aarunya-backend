@@ -29,10 +29,10 @@ const TABLES = [
 /* The store's starting settings. Every one of these is editable on the Settings screen;
    they are here only so the first run has a working shipping rule and contact block. */
 const DEFAULT_CONFIG = {
-  WHATSAPP_NUMBER: '919876543210',
+  WHATSAPP_NUMBER: '919747738193',
   WHATSAPP_TEXT: 'Hi Aarunya Jewels by Veena, I would like to know more about your jewellery.',
   INSTAGRAM_HANDLE: 'aarunyajewelsbyveena',
-  EMAIL: 'hello@aarunyajewels.in',
+  EMAIL: 'Aarunyajewelsbyveena@gmail.com',
   FREE_SHIPPING_THRESHOLD: 499,
   SHIPPING_FEE: 60,
   GIFT_WRAP_FEE: 49,
