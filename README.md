@@ -60,6 +60,12 @@ session gets a 403 there. Change these before anything is deployed.
 | `STORE_ORIGIN` | `http://localhost:5173` | CORS allow-list |
 | `COOKIE_SECURE` | `false` | set `true` behind HTTPS |
 | `SEED_USER_EMAIL` / `SEED_USER_PASSWORD` | see above | the non-admin account `db:seed` creates |
+| `UPLOAD_DIR` | `./uploads` | where uploaded images are written |
+| `RATE_LIMIT_*` | see `src/lib/limits.js` | override a rate limit (`API`, `LOGIN`, `CHECKOUT`, `TRACK`, `CONTACT`) |
+
+Rate limits are relaxed outside `NODE_ENV=production`, so the test suite can be run more
+than once an hour against a local server. A deployed server enforces the production
+numbers; set `NODE_ENV=production`.
 
 ## Tests
 

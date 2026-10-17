@@ -16,6 +16,7 @@ import { num } from '../lib/format.js';
 import { readContent } from './storefront.js';
 import { badRequest, notFound, ruleError, wrap } from '../lib/errors.js';
 import { parseBody, parseQuery } from '../middleware/validate.js';
+import { LIMITS } from '../lib/limits.js';
 
 export const router = Router();
 
@@ -176,7 +177,7 @@ const orderIn = z.object({
 /* A checkout writes stock, so it is rate limited per IP. */
 const checkoutLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
-  limit: 20,
+  limit: LIMITS.checkout,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'rate_limited', message: 'Too many attempts. Please try again shortly.' },
@@ -316,7 +317,7 @@ function tokenMatches(given, stored) {
 /* Tracking is a lookup against a secret, so it is throttled like one. */
 const trackLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
-  limit: 40,
+  limit: LIMITS.track,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'rate_limited', message: 'Too many attempts. Please try again shortly.' },
@@ -450,7 +451,7 @@ router.post('/orders/:orderNo/replacement-request', trackLimiter,
 
 const contactLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  limit: 10,
+  limit: LIMITS.contact,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'rate_limited', message: 'Too many messages. Please try again later.' },

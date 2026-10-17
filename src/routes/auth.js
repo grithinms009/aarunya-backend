@@ -14,6 +14,7 @@ import { query, tx } from '../db/pool.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
 import { badRequest, unauthorized, wrap } from '../lib/errors.js';
 import { parseBody } from '../middleware/validate.js';
+import { LIMITS } from '../lib/limits.js';
 import { clearSession, issueSession, requireAuth } from '../middleware/auth.js';
 
 export const router = Router();
@@ -25,7 +26,7 @@ const RESET_TTL_MIN = 30;
    spreading attempts across addresses from one IP is still limited. */
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 20,
+  limit: LIMITS.login,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'rate_limited', message: 'Too many attempts. Please wait a few minutes.' },

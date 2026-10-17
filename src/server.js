@@ -17,6 +17,7 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 
 import { pool } from './db/pool.js';
+import { LIMITS } from './lib/limits.js';
 import { csrfGuard, readSession, requireRole } from './middleware/auth.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 
@@ -69,7 +70,7 @@ app.use(readSession);
 /* A broad ceiling on the whole API; /auth/login is throttled far harder in its router. */
 app.use('/api', rateLimit({
   windowMs: 60_000,
-  limit: 600,
+  limit: LIMITS.api,
   standardHeaders: true,
   legacyHeaders: false,
 }));
