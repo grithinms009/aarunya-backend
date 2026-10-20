@@ -142,10 +142,38 @@ Order items are snapshots (name, colour, SKU, price, image), so deleting a produ
 rewrites order history.
 
 Product photos, category cards and banner artwork are posted to `POST /api/admin/uploads`,
-written under `UPLOAD_DIR` and served read-only from `/uploads`. The database stores only the
-URL, so rows stay small and the files can move behind a CDN later by changing one module.
-Uploads are checked server-side: the declared type against an allow-list, the real magic
-bytes, and the decoded size.
+written under `UPLOAD_DIR` (the repo's `uploads/` by default) and served read-only from
+`/uploads`. The database stores only the URL, so rows stay small and the files can move
+behind a CDN later by changing one module. Uploads are checked server-side: the declared
+type against an allow-list, the real magic bytes, and the decoded size.
+
+Files are filed as `<purpose>/<year>/<month>/<name>-<id>.<ext>`:
+
+```
+uploads/
+  category/2026/10/anti-tarnish-necklaces-b31fec3a.jpg
+  product/2026/10/pearl-drop-choker-7f2a91c4.jpg
+  banner/2026/10/banner-3d9c0a11.jpg
+```
+
+The purpose keeps product photos apart from banners, the year and month stop any one
+directory growing without bound and make a backup easy to scope, and the leading slug says
+what the image is for so the folder is readable rather than a wall of UUIDs. The random
+suffix is what guarantees uniqueness. `uploads/` is gitignored — back it up with the
+database, since the rows reference these paths.
+
+## Backups
+
+`npm run db:reset` drops every table, which is right for a test run and destructive for a
+store someone has been filling in by hand. It therefore **always snapshots first**, into
+`backups/`, and prints what it is about to clear:
+
+```bash
+npm run db:snapshot              # take one by hand
+npm run db:restore -- backups/<file>.sql
+```
+
+`backups/` is gitignored. Prune it yourself; nothing deletes a snapshot automatically.
 
 ## Security
 

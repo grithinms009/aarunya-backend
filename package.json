@@ -10,7 +10,9 @@
     "db:migrate": "node src/db/migrate.js",
     "db:seed": "node src/db/seed.js",
     "db:reset": "node src/db/migrate.js --reset && node src/db/seed.js",
-    "test": "node test/rules.test.mjs"
+    "test": "node test/rules.test.mjs",
+    "db:snapshot": "node scripts/snapshot.mjs",
+    "db:restore": "node scripts/restore.mjs"
   },
   "dependencies": {
     "cookie-parser": "1.4.7",

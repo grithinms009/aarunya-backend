@@ -5,6 +5,16 @@
    never the bytes, so rows stay small and images can move behind a CDN later by changing
    only what this module returns.
 
+   Files are filed as:
+
+     uploads/<purpose>/<year>/<month>/<name>-<id>.<ext>
+     e.g. uploads/category/2026/10/necklaces-a1b2c3d4.jpg
+
+   The purpose keeps product photos apart from banners, the year and month stop any one
+   directory growing without bound and make a backup easy to scope, and the leading name
+   is a slug of what the image is for, so the folder is readable rather than a wall of
+   UUIDs. The random suffix is what actually guarantees uniqueness.
+
    The image arrives as a base64 data URL, which is what the browser already produces when
    it downscales the file before upload. Everything is checked server-side: declared type
    against an allow-list, the real magic bytes, and the decoded size. */
@@ -12,6 +22,7 @@ import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
+import { slugify } from '../lib/format.js';
 import { z } from 'zod';
 import { badRequest, wrap } from '../lib/errors.js';
 import { parseBody } from '../middleware/validate.js';
@@ -41,6 +52,9 @@ router.post('/', parseBody(z.object({
   /* data:image/jpeg;base64,…  — the shape the browser produces after downscaling. */
   data: z.string().min(16).max(12_000_000),
   purpose: z.enum(PURPOSES).default('product'),
+  /* What the image is for — a product or category name. Used to make the file name
+     readable; it never decides where the file lands, so it cannot escape the folder. */
+  name: z.string().max(120).default(''),
 })), wrap(async (req, res) => {
   const match = /^data:([a-z]+\/[a-z0-9.+-]+);base64,(.+)$/i.exec(req.body.data);
   if (!match) throw badRequest('Please choose an image file');
@@ -64,21 +78,41 @@ router.post('/', parseBody(z.object({
     throw badRequest('That file is not the image type it claims to be');
   }
 
-  const name = `${randomUUID()}.${type.ext}`;
-  const dir = join(UPLOAD_DIR, req.body.purpose);
-  await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, name), buf);
+  const now = new Date();
+  const year = String(now.getFullYear());
+  const month = String(now.getMonth() + 1).padStart(2, '0');
 
-  const url = `/uploads/${req.body.purpose}/${name}`;
-  res.status(201).json({ url, bytes: buf.length, contentType: declared.toLowerCase() });
+  /* Slugged for readability and trimmed, with a random suffix for uniqueness. Anything
+     the slug cannot represent falls back to the purpose, so the name is never empty. */
+  const stem = (slugify(req.body.name).slice(0, 48) || req.body.purpose).replace(/^-+|-+$/g, '');
+  const file = `${stem}-${randomUUID().slice(0, 8)}.${type.ext}`;
+
+  const relative = `${req.body.purpose}/${year}/${month}/${file}`;
+  const dir = join(UPLOAD_DIR, req.body.purpose, year, month);
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, file), buf);
+
+  res.status(201).json({
+    url: `/uploads/${relative}`,
+    bytes: buf.length,
+    contentType: declared.toLowerCase(),
+  });
 }));
 
-/** Removes an upload this API wrote. Paths outside /uploads are refused. */
+/**
+ * Removes an upload this API wrote.
+ *
+ * The path is matched against the exact shape this module produces and rebuilt from the
+ * captured parts, so nothing outside the uploads tree can be reached — no traversal, no
+ * absolute paths, no deleting a directory.
+ */
 router.delete('/', parseBody(z.object({ url: z.string().max(500) })), wrap(async (req, res) => {
-  const m = /^\/uploads\/([a-z]+)\/([A-Za-z0-9-]+\.[a-z0-9]+)$/.exec(req.body.url);
+  const m = /^\/uploads\/([a-z]+)\/(\d{4})\/(\d{2})\/([A-Za-z0-9][A-Za-z0-9-]*\.[a-z0-9]+)$/
+    .exec(req.body.url);
   if (!m || !PURPOSES.includes(m[1])) throw badRequest('That is not an uploaded image');
+  const [, purpose, year, month, file] = m;
   try {
-    await unlink(join(UPLOAD_DIR, m[1], m[2]));
+    await unlink(join(UPLOAD_DIR, purpose, year, month, file));
   } catch {
     /* Already gone is a success for the caller. */
   }
