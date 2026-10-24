@@ -72,7 +72,8 @@ export const OFFER_LINKS = [
 
 /** The artwork that ships with the store, for "Restore original". */
 export const DEFAULT_IMAGES = {
-  heroDesktop: '/assets/aarunya-hero-pastel.jpg',
+  heroDesktop: '/assets/hero-desktop.jpg',
+  heroMobile: '/assets/hero-mobile.jpg',
   personalised: '/assets/personalised-banner.jpg',
   personalisedMobile: '/assets/personalised-gift-box-v2.jpg',
   offers: ['/assets/offer-festive-sale.jpg', '/assets/offer-little-gifts.jpg'],
