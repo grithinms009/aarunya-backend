@@ -3,3 +3,7 @@ node_modules/
 *.log
 uploads/
 backups/
+
+# Deployment payloads: copied to the server by hand, far too big for git
+deploy/*.sql
+deploy/*.tar.gz
