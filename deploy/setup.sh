@@ -21,7 +21,7 @@ node -e 'const [maj]=process.versions.node.split(".").map(Number); if(maj<20){co
 echo "node $(node -v), docker present"
 
 say "Starting PostgreSQL"
-docker compose up -d
+docker compose up -d db
 for i in $(seq 1 60); do
   docker exec aarunya-postgres pg_isready -U aarunya -d aarunya >/dev/null 2>&1 && break
   sleep 1
@@ -29,6 +29,8 @@ done
 docker exec aarunya-postgres pg_isready -U aarunya -d aarunya
 
 say "Installing dependencies"
+# Needed on the host too: the setup and catalogue scripts below run outside the
+# container. The API itself installs its own inside the image.
 npm ci --omit=dev
 
 say "Environment"
@@ -95,13 +97,24 @@ else
   echo "         image will 404 until that archive is copied across and unpacked."
 fi
 
+say "Starting the API"
+# The image runs as uid 1000, and the bind mount carries host ownership straight
+# through, so the container cannot write uploads unless the host directory matches.
+chown -R 1000:1000 uploads backups 2>/dev/null || true
+docker compose up -d --build api
+for i in $(seq 1 60); do
+  [ "$(docker inspect aarunya-api --format '{{.State.Health.Status}}' 2>/dev/null)" = "healthy" ] && break
+  sleep 2
+done
+docker compose ps
+
 say "Done"
 cat <<'NEXT'
 Still to do, in this order:
 
   1. Edit .env — ADMIN_ORIGIN and STORE_ORIGIN must be the real https:// domains,
      or the browser will refuse every admin and checkout request.
-  2. Change both seeded passwords:  veena@aarunyajewels.in / user@aarunyajewels.in
-  3. Put the app behind a process manager and nginx with TLS. See deploy/README.md.
-  4. Verify:  curl -s localhost:4000/api/storefront | head -c 200
+     Then:  docker compose up -d api     (to pick the change up)
+  2. Put nginx with TLS in front. See deploy/README.md.
+  3. Verify:  curl -s localhost:4000/api/products | head -c 120
 NEXT

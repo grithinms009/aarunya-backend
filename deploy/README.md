@@ -63,32 +63,37 @@ plain HTTP.
 
 ## 4. Keep it running
 
-```ini
-# /etc/systemd/system/aarunya-api.service
-[Unit]
-Description=Aarunya backend
-After=network.target docker.service
-Requires=docker.service
-
-[Service]
-Type=simple
-WorkingDirectory=/var/www/aarunya/aarunya-backend
-ExecStart=/usr/bin/node src/server.js
-Restart=always
-RestartSec=5
-EnvironmentFile=/var/www/aarunya/aarunya-backend/.env
-User=www-data
-
-[Install]
-WantedBy=multi-user.target
-```
+Both the database and the API run under Compose, so there is nothing else to install and
+nothing to keep alive by hand:
 
 ```bash
-sudo systemctl daemon-reload && sudo systemctl enable --now aarunya-api
-sudo systemctl status aarunya-api
+docker compose up -d          # both services
+docker compose ps             # api should read (healthy)
+docker compose logs -f api    # follow the log
+docker compose restart api    # after an .env change
+docker compose up -d --build api   # after a git pull that changed the code
 ```
 
-`uploads/` must be writable by the same user: `sudo chown -R www-data:www-data uploads`.
+`restart: unless-stopped` on both services means they come back by themselves after a
+reboot or a crash. No systemd unit is needed.
+
+Two details worth knowing:
+
+**Ports are bound to loopback.** `127.0.0.1:4000` for the API and `127.0.0.1:5433` for
+PostgreSQL. Neither is reachable from outside the machine — nginx terminates TLS and
+proxies to the API, and nothing outside needs to reach the database at all. Publishing
+either on `0.0.0.0` would put the API on plain HTTP and the database on the open
+internet behind a password that is written in this repository.
+
+**`uploads/` is a bind mount, owned by uid 1000.** The image runs as the unprivileged
+`node` user, and a bind mount carries the host's ownership straight through, so the
+container cannot write product photographs unless the host directory matches:
+
+```bash
+sudo chown -R 1000:1000 uploads backups
+```
+
+`setup.sh` does this already. It matters again if you ever unpack an archive as root.
 
 ## 5. Put nginx in front
 
@@ -97,7 +102,7 @@ server {
     server_name api.yourdomain.com;
 
     location / {
-        proxy_pass http://127.0.0.1:4000;
+        proxy_pass http://127.0.0.1:4000;   # the api container
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;

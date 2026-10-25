@@ -1,0 +1,10 @@
+.git
+node_modules
+uploads
+backups
+test
+catalogue
+deploy/*.tar.gz
+deploy/*.sql
+*.log
+.env

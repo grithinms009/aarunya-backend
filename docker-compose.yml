@@ -5,10 +5,13 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: aarunya
-      POSTGRES_PASSWORD: aarunya_local_pw
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aarunya_local_pw}
       POSTGRES_DB: aarunya
     ports:
-      - '5433:5432'
+      # Bound to loopback: the API reaches the database over the compose network, so
+      # nothing outside this machine needs to. Published only so psql and the snapshot
+      # scripts can reach it from the host.
+      - '127.0.0.1:5433:5432'
     volumes:
       - aarunya_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -16,6 +19,34 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  api:
+    build: .
+    image: aarunya-api
+    container_name: aarunya-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Overrides whatever .env says. Inside the container `localhost` is the container
+      # itself, so the host's 5433 is meaningless — the database answers on the compose
+      # network as `db` on its own port. dotenv does not overwrite variables that are
+      # already set, so this wins.
+      DATABASE_URL: postgres://aarunya:${POSTGRES_PASSWORD:-aarunya_local_pw}@db:5432/aarunya
+      NODE_ENV: production
+      PORT: '4000'
+    ports:
+      # Loopback as well: nginx terminates TLS and proxies to it. Publishing this on
+      # 0.0.0.0 would expose the API over plain HTTP, bypassing nginx entirely.
+      - '127.0.0.1:4000:4000'
+    volumes:
+      # Product photographs live on the host so they survive a rebuild and so nginx can
+      # serve them off disk rather than through Node.
+      - ./uploads:/app/uploads
+      - ./backups:/app/backups
 
 volumes:
   aarunya_pgdata:
