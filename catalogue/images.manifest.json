@@ -1,0 +1,356 @@
+{
+  "images": {
+    "AJ-BG002-GLD_front": {
+      "sku": "AJ-BG002-GLD",
+      "kind": "front",
+      "bytes": 230130,
+      "file": "assets/products/AJ-BG002-GLD/AJ-BG002-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:51:20.090Z"
+    },
+    "AJ-BG002-GLD_model": {
+      "sku": "AJ-BG002-GLD",
+      "kind": "model",
+      "bytes": 396232,
+      "file": "assets/products/AJ-BG002-GLD/AJ-BG002-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:51:20.174Z"
+    },
+    "AJ-RG003-GLD_front": {
+      "sku": "AJ-RG003-GLD",
+      "kind": "front",
+      "bytes": 211603,
+      "file": "assets/products/AJ-RG003-GLD/AJ-RG003-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:51:20.250Z"
+    },
+    "AJ-RG003-GLD_model": {
+      "sku": "AJ-RG003-GLD",
+      "kind": "model",
+      "bytes": 391181,
+      "file": "assets/products/AJ-RG003-GLD/AJ-RG003-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:51:20.340Z"
+    },
+    "AJ-RG004-GLD_front": {
+      "sku": "AJ-RG004-GLD",
+      "kind": "front",
+      "bytes": 171629,
+      "file": "assets/products/AJ-RG004-GLD/AJ-RG004-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:51:20.423Z"
+    },
+    "AJ-RG004-GLD_model": {
+      "sku": "AJ-RG004-GLD",
+      "kind": "model",
+      "bytes": 438528,
+      "file": "assets/products/AJ-RG004-GLD/AJ-RG004-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:51:20.507Z"
+    },
+    "AJ-AN002-GLD_front": {
+      "sku": "AJ-AN002-GLD",
+      "kind": "front",
+      "bytes": 242543,
+      "file": "assets/products/AJ-AN002-GLD/AJ-AN002-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:52:54.665Z"
+    },
+    "AJ-AN002-GLD_model": {
+      "sku": "AJ-AN002-GLD",
+      "kind": "model",
+      "bytes": 297433,
+      "file": "assets/products/AJ-AN002-GLD/AJ-AN002-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:52:54.712Z"
+    },
+    "AJ-AN003-GLD_front": {
+      "sku": "AJ-AN003-GLD",
+      "kind": "front",
+      "bytes": 272484,
+      "file": "assets/products/AJ-AN003-GLD/AJ-AN003-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:52:54.753Z"
+    },
+    "AJ-AN003-GLD_model": {
+      "sku": "AJ-AN003-GLD",
+      "kind": "model",
+      "bytes": 331711,
+      "file": "assets/products/AJ-AN003-GLD/AJ-AN003-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:52:54.796Z"
+    },
+    "AJ-HC002-GLD_front": {
+      "sku": "AJ-HC002-GLD",
+      "kind": "front",
+      "bytes": 244519,
+      "file": "assets/products/AJ-HC002-GLD/AJ-HC002-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:52:54.837Z"
+    },
+    "AJ-HC002-GLD_model": {
+      "sku": "AJ-HC002-GLD",
+      "kind": "model",
+      "bytes": 318706,
+      "file": "assets/products/AJ-HC002-GLD/AJ-HC002-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:52:54.879Z"
+    },
+    "AJ-HC003-GLD_front": {
+      "sku": "AJ-HC003-GLD",
+      "kind": "front",
+      "bytes": 255609,
+      "file": "assets/products/AJ-HC003-GLD/AJ-HC003-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:52:54.920Z"
+    },
+    "AJ-HC003-GLD_model": {
+      "sku": "AJ-HC003-GLD",
+      "kind": "model",
+      "bytes": 328499,
+      "file": "assets/products/AJ-HC003-GLD/AJ-HC003-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:52:54.961Z"
+    },
+    "AJ-HC004-GLD_front": {
+      "sku": "AJ-HC004-GLD",
+      "kind": "front",
+      "bytes": 293466,
+      "file": "assets/products/AJ-HC004-GLD/AJ-HC004-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:52:55.003Z"
+    },
+    "AJ-HC004-GLD_model": {
+      "sku": "AJ-HC004-GLD",
+      "kind": "model",
+      "bytes": 348871,
+      "file": "assets/products/AJ-HC004-GLD/AJ-HC004-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:52:55.045Z"
+    },
+    "AJ-AN004-GLD_front": {
+      "sku": "AJ-AN004-GLD",
+      "kind": "front",
+      "bytes": 249680,
+      "file": "assets/products/AJ-AN004-GLD/AJ-AN004-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:55:31.769Z"
+    },
+    "AJ-AN004-GLD_model": {
+      "sku": "AJ-AN004-GLD",
+      "kind": "model",
+      "bytes": 281020,
+      "file": "assets/products/AJ-AN004-GLD/AJ-AN004-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:55:31.814Z"
+    },
+    "AJ-ER001-GLD_front": {
+      "sku": "AJ-ER001-GLD",
+      "kind": "front",
+      "bytes": 249235,
+      "file": "assets/products/AJ-ER001-GLD/AJ-ER001-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:55:31.857Z"
+    },
+    "AJ-ER001-GLD_model": {
+      "sku": "AJ-ER001-GLD",
+      "kind": "model",
+      "bytes": 292638,
+      "file": "assets/products/AJ-ER001-GLD/AJ-ER001-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:55:31.912Z"
+    },
+    "AJ-ER002-GLD_front": {
+      "sku": "AJ-ER002-GLD",
+      "kind": "front",
+      "bytes": 187273,
+      "file": "assets/products/AJ-ER002-GLD/AJ-ER002-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:55:31.954Z"
+    },
+    "AJ-ER002-GLD_model": {
+      "sku": "AJ-ER002-GLD",
+      "kind": "model",
+      "bytes": 221616,
+      "file": "assets/products/AJ-ER002-GLD/AJ-ER002-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:55:31.992Z"
+    },
+    "AJ-ER003-GLD_front": {
+      "sku": "AJ-ER003-GLD",
+      "kind": "front",
+      "bytes": 243596,
+      "file": "assets/products/AJ-ER003-GLD/AJ-ER003-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:55:32.029Z"
+    },
+    "AJ-ER003-GLD_model": {
+      "sku": "AJ-ER003-GLD",
+      "kind": "model",
+      "bytes": 234507,
+      "file": "assets/products/AJ-ER003-GLD/AJ-ER003-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:55:32.065Z"
+    },
+    "AJ-ER004-GLD_front": {
+      "sku": "AJ-ER004-GLD",
+      "kind": "front",
+      "bytes": 187456,
+      "file": "assets/products/AJ-ER004-GLD/AJ-ER004-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:55:32.104Z"
+    },
+    "AJ-ER004-GLD_model": {
+      "sku": "AJ-ER004-GLD",
+      "kind": "model",
+      "bytes": 217394,
+      "file": "assets/products/AJ-ER004-GLD/AJ-ER004-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:55:32.140Z"
+    },
+    "AJ-NR001-GLD_front": {
+      "sku": "AJ-NR001-GLD",
+      "kind": "front",
+      "bytes": 154209,
+      "file": "assets/products/AJ-NR001-GLD/AJ-NR001-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:57:43.155Z"
+    },
+    "AJ-NR001-GLD_model": {
+      "sku": "AJ-NR001-GLD",
+      "kind": "model",
+      "bytes": 214125,
+      "file": "assets/products/AJ-NR001-GLD/AJ-NR001-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:57:43.193Z"
+    },
+    "AJ-NR002-GLD_front": {
+      "sku": "AJ-NR002-GLD",
+      "kind": "front",
+      "bytes": 146116,
+      "file": "assets/products/AJ-NR002-GLD/AJ-NR002-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:57:43.227Z"
+    },
+    "AJ-NR002-GLD_model": {
+      "sku": "AJ-NR002-GLD",
+      "kind": "model",
+      "bytes": 220812,
+      "file": "assets/products/AJ-NR002-GLD/AJ-NR002-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:57:43.263Z"
+    },
+    "AJ-NR003-GLD_front": {
+      "sku": "AJ-NR003-GLD",
+      "kind": "front",
+      "bytes": 164867,
+      "file": "assets/products/AJ-NR003-GLD/AJ-NR003-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:57:43.298Z"
+    },
+    "AJ-NR003-GLD_model": {
+      "sku": "AJ-NR003-GLD",
+      "kind": "model",
+      "bytes": 210442,
+      "file": "assets/products/AJ-NR003-GLD/AJ-NR003-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:57:43.334Z"
+    },
+    "AJ-NR004-GLD_front": {
+      "sku": "AJ-NR004-GLD",
+      "kind": "front",
+      "bytes": 160123,
+      "file": "assets/products/AJ-NR004-GLD/AJ-NR004-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:57:43.370Z"
+    },
+    "AJ-NR004-GLD_model": {
+      "sku": "AJ-NR004-GLD",
+      "kind": "model",
+      "bytes": 202727,
+      "file": "assets/products/AJ-NR004-GLD/AJ-NR004-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T03:57:43.410Z"
+    },
+    "AJ-BR002-GLD_front": {
+      "sku": "AJ-BR002-GLD",
+      "kind": "front",
+      "bytes": 239494,
+      "file": "assets/products/AJ-BR002-GLD/AJ-BR002-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T04:09:13.410Z"
+    },
+    "AJ-BR002-GLD_model": {
+      "sku": "AJ-BR002-GLD",
+      "kind": "model",
+      "bytes": 419425,
+      "file": "assets/products/AJ-BR002-GLD/AJ-BR002-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T04:09:13.494Z"
+    },
+    "AJ-BR003-GLD_front": {
+      "sku": "AJ-BR003-GLD",
+      "kind": "front",
+      "bytes": 209456,
+      "file": "assets/products/AJ-BR003-GLD/AJ-BR003-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T04:09:13.585Z"
+    },
+    "AJ-BR003-GLD_model": {
+      "sku": "AJ-BR003-GLD",
+      "kind": "model",
+      "bytes": 355373,
+      "file": "assets/products/AJ-BR003-GLD/AJ-BR003-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T04:09:13.685Z"
+    },
+    "AJ-BR004-GLD_front": {
+      "sku": "AJ-BR004-GLD",
+      "kind": "front",
+      "bytes": 161983,
+      "file": "assets/products/AJ-BR004-GLD/AJ-BR004-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T04:09:13.761Z"
+    },
+    "AJ-BR004-GLD_model": {
+      "sku": "AJ-BR004-GLD",
+      "kind": "model",
+      "bytes": 409852,
+      "file": "assets/products/AJ-BR004-GLD/AJ-BR004-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T04:09:13.842Z"
+    },
+    "AJ-HA001-GLD_front": {
+      "sku": "AJ-HA001-GLD",
+      "kind": "front",
+      "bytes": 205788,
+      "file": "assets/products/AJ-HA001-GLD/AJ-HA001-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T04:09:13.922Z"
+    },
+    "AJ-HA001-GLD_model": {
+      "sku": "AJ-HA001-GLD",
+      "kind": "model",
+      "bytes": 406558,
+      "file": "assets/products/AJ-HA001-GLD/AJ-HA001-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T04:09:14.011Z"
+    },
+    "AJ-HA002-GLD_front": {
+      "sku": "AJ-HA002-GLD",
+      "kind": "front",
+      "bytes": 239796,
+      "file": "assets/products/AJ-HA002-GLD/AJ-HA002-GLD_front.jpg",
+      "source": "manual",
+      "at": "2026-10-25T04:09:14.105Z"
+    },
+    "AJ-HA002-GLD_model": {
+      "sku": "AJ-HA002-GLD",
+      "kind": "model",
+      "bytes": 459804,
+      "file": "assets/products/AJ-HA002-GLD/AJ-HA002-GLD_model.jpg",
+      "source": "manual",
+      "at": "2026-10-25T04:09:14.217Z"
+    }
+  }
+}
