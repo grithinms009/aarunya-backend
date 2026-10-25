@@ -26,6 +26,15 @@ git pull                       # the server clone may be behind
 sudo bash deploy/setup.sh
 ```
 
+If the dump is not there the script **stops** rather than quietly building an empty
+shop — that failure is far easier to notice now than three steps later. To start empty
+on purpose, pass `--fresh`.
+
+The dump drops every object before recreating it, so running it over a database that
+`db:migrate` and `db:seed` have already touched gives an exact copy rather than a merge.
+Without that, the settings and banner rows collide and are silently kept at their seeded
+defaults — the wrong shipping threshold, no WhatsApp number, no hero artwork.
+
 It starts PostgreSQL, installs dependencies, writes `.env` with a freshly generated
 `JWT_SECRET`, restores the catalogue and unpacks the photographs. Re-running it is safe:
 it will not overwrite an existing `.env`, and it refuses to restore over a catalogue that

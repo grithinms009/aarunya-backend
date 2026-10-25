@@ -4,8 +4,11 @@
 # Idempotent: safe to re-run. It never overwrites an existing .env, and it will
 # not restore the database over a catalogue that already has products in it.
 #
-#   sudo bash deploy/setup.sh
+#   sudo bash deploy/setup.sh            # restores the catalogue from deploy/
+#   sudo bash deploy/setup.sh --fresh    # deliberately start with an empty shop
 set -euo pipefail
+FRESH=0
+[ "${1:-}" = "--fresh" ] && FRESH=1
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -46,22 +49,48 @@ fi
 say "Database"
 HAVE=$(docker exec aarunya-postgres psql -U aarunya -d aarunya -t -A \
   -c "select count(*) from product" 2>/dev/null || echo 0)
+DUMP=deploy/aarunya-seed-clean.sql
+
 if [ "${HAVE:-0}" -gt 0 ]; then
   echo "catalogue already has $HAVE product(s) — not restoring over it"
-elif [ -f deploy/aarunya-seed-clean.sql ]; then
-  docker exec -i aarunya-postgres psql -U aarunya -d aarunya -q < deploy/aarunya-seed-clean.sql
+elif [ -f "$DUMP" ]; then
+  # The dump drops every object before recreating it, so it is safe over a schema
+  # that migrate/seed has already written: the result is an exact copy, not a merge.
+  docker exec -i aarunya-postgres psql -U aarunya -d aarunya -q < "$DUMP"
   echo "restored $(docker exec aarunya-postgres psql -U aarunya -d aarunya -t -A -c 'select count(*) from product') products"
-else
+elif [ "$FRESH" = "1" ]; then
   npm run db:migrate && npm run db:seed
-  echo "no dump found — created an empty catalogue with the two accounts"
+  echo "started empty, as --fresh asked"
+else
+  # Running migrate/seed here would look like success and leave a shop with nothing
+  # in it. Stopping is the kinder failure.
+  cat <<'MISSING'
+
+  STOPPING: no catalogue to restore.
+
+  deploy/aarunya-seed-clean.sql is not here. Copy it from the machine that has the
+  working shop, along with the photographs:
+
+    scp backups/aarunya-seed-clean.sql root@THIS-SERVER:$PWD/deploy/
+    scp backups/uploads.tar.gz         root@THIS-SERVER:$PWD/deploy/
+
+  Then run this script again.
+
+  If you genuinely want to start with an empty shop and fill it from the admin
+  panel, re-run with:  sudo bash deploy/setup.sh --fresh
+MISSING
+  exit 1
 fi
 
 say "Uploads"
 if [ -f deploy/uploads.tar.gz ]; then
   tar -xzf deploy/uploads.tar.gz
   echo "$(find uploads -type f | wc -l) file(s) in uploads/"
+elif [ "$FRESH" = "1" ]; then
+  echo "no photographs yet — they arrive as products are added through the admin"
 else
-  echo "no uploads.tar.gz — product images will 404 until it is copied across"
+  echo "WARNING: no uploads.tar.gz. The catalogue is restored but every product"
+  echo "         image will 404 until that archive is copied across and unpacked."
 fi
 
 say "Done"
