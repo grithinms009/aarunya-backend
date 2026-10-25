@@ -6,17 +6,23 @@ The repository carries the code. It does **not** carry the catalogue or the prod
 photographs — those live in PostgreSQL and in `uploads/`, both gitignored. They have to
 be copied across separately, once.
 
-## 1. Copy the three things git does not have
+## 1. Nothing to copy
 
-From the machine that has the working catalogue:
-
-```bash
-scp backups/aarunya-seed-clean.sql  root@SERVER:/var/www/aarunya/aarunya-backend/deploy/
-scp backups/uploads.tar.gz          root@SERVER:/var/www/aarunya/aarunya-backend/deploy/
-```
+The catalogue seed and the product photographs are in the repository, so `git pull` brings
+everything a server needs.
 
 **Do not copy `.env`.** It holds a development JWT secret, localhost origins and an image
 API key. The setup script writes a fresh one.
+
+### Accounts
+
+The dump carries **no** `app_user` rows. These repositories are public, and a password
+hash in a public repository is a password, however it was hashed. `deploy/setup.sh` runs
+`deploy/create-accounts.mjs` after the restore, which creates the two sign-in accounts
+with generated passwords and prints them **once**. Copy them then.
+
+To choose them yourself, set `SEED_ADMIN_PASSWORD` and `SEED_USER_PASSWORD` in `.env`
+before running setup.
 
 ## 2. Run the setup
 
@@ -112,8 +118,9 @@ Then `sudo certbot --nginx -d api.yourdomain.com`.
 
 ## 6. Before taking payments
 
-- **Change both seeded passwords.** `veena@aarunyajewels.in` and `user@aarunyajewels.in`
-  ship with the passwords in the main README. They are public.
+- **Keep the generated passwords safe.** Setup prints them once and stores them nowhere.
+  If they are lost, delete both rows from `app_user` and re-run
+  `node deploy/create-accounts.mjs`.
 - **No payment gateway is connected.** `POST /api/payments/create` reports
   `GATEWAY_NOT_CONFIGURED` rather than pretending a payment succeeded. Razorpay is still
   to be wired in.

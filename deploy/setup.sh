@@ -58,6 +58,8 @@ elif [ -f "$DUMP" ]; then
   # that migrate/seed has already written: the result is an exact copy, not a merge.
   docker exec -i aarunya-postgres psql -U aarunya -d aarunya -q < "$DUMP"
   echo "restored $(docker exec aarunya-postgres psql -U aarunya -d aarunya -t -A -c 'select count(*) from product') products"
+  # The dump carries no accounts on purpose — see deploy/create-accounts.mjs.
+  node deploy/create-accounts.mjs
 elif [ "$FRESH" = "1" ]; then
   npm run db:migrate && npm run db:seed
   echo "started empty, as --fresh asked"

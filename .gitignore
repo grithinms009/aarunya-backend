@@ -4,6 +4,7 @@ node_modules/
 uploads/
 backups/
 
-# Deployment payloads: copied to the server by hand, far too big for git
-deploy/*.sql
-deploy/*.tar.gz
+# The catalogue seed and the product photographs ship in the repository so a server
+# can come up with `git pull` alone. The dump deliberately carries no app_user rows:
+# these repositories are public, and a password hash in a public repository is a
+# password. Accounts are created on the server by deploy/create-accounts.mjs.
