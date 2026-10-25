@@ -46,14 +46,23 @@ It starts PostgreSQL, installs dependencies, writes `.env` with a freshly genera
 it will not overwrite an existing `.env`, and it refuses to restore over a catalogue that
 already holds products.
 
-## 3. Edit `.env`
+## 3. `.env`
 
-Two values decide whether the browser will talk to this server at all:
+`setup.sh` handles this. The real origins live in `.env.example` and are copied into
+`.env` on first run; on a server set up before the domains were known, it moves them
+across too — but only while they still hold a development default, so a value you
+changed deliberately is never overwritten.
 
 ```
-ADMIN_ORIGIN=https://admin.yourdomain.com
-STORE_ORIGIN=https://yourdomain.com
+ADMIN_ORIGIN=https://admin.aarunyajewelsbyveena.in
+STORE_ORIGIN=https://aarunyajewelsbyveena.in
+COOKIE_SECURE=true
 ```
+
+`.env` itself is gitignored and must stay that way. `JWT_SECRET` signs every session
+cookie: anyone holding it can mint an admin session for this store, and these
+repositories are public. The same goes for the database password and the image API key.
+Secrets are generated on the server and stay there.
 
 CORS is an explicit allow-list and the session cookie is `SameSite=Lax`, so a mismatch
 here means every admin action and every checkout fails — with a CORS error, not an

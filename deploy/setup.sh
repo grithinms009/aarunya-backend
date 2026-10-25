@@ -35,7 +35,23 @@ npm ci --omit=dev
 
 say "Environment"
 if [ -f .env ]; then
-  echo ".env already exists — leaving it alone"
+  echo ".env already exists — keeping its secrets"
+  # The origins, and whether the cookie is https-only, are not secrets: they are the
+  # same on every deployment of this site and they live in .env.example. A server set
+  # up before the domains were known still points at localhost, which fails CORS on
+  # every request. Move those across, and only while they are still the development
+  # defaults — a value someone has deliberately changed is left alone.
+  for KEY in ADMIN_ORIGIN STORE_ORIGIN COOKIE_SECURE NODE_ENV; do
+    CUR=$(grep -E "^$KEY=" .env | head -1 | cut -d= -f2-)
+    WANT=$(grep -E "^$KEY=" .env.example | head -1 | cut -d= -f2-)
+    case "$CUR" in
+      *localhost*|false|development)
+        if [ -n "$WANT" ] && [ "$CUR" != "$WANT" ]; then
+          sed -i "s|^$KEY=.*|$KEY=$WANT|" .env
+          echo "  $KEY: $CUR -> $WANT"
+        fi ;;
+    esac
+  done
 else
   cp .env.example .env
   # A fresh secret per server. Sessions signed with the old one stop working,
