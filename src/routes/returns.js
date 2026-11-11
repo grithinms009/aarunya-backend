@@ -6,6 +6,7 @@
    effects: a restocked return adds the quantity back with reason `return`, a replacement
    takes one unit with reason `replacement`, and a refund sets the order's payment to
    refunded or partial depending on the amount. */
+import { creditRefundForOrder } from '../lib/invoice.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { query, tx } from '../db/pool.js';
@@ -241,6 +242,15 @@ router.post('/:returnNo/refund',
            CASE WHEN $2 >= total THEN 'refunded'::payment_status ELSE 'partial'::payment_status END
          WHERE id = $1`,
         [rows[0].order_id, Math.round(amount)]);
+
+      /* If a tax invoice was issued for this order, the refund is reversed by a credit note
+         (GST-inclusive amount, split at the rate of the returned item). The invoice itself
+         is never altered. */
+      const { rows: rq } = await c.query(`SELECT item_sku FROM return_request WHERE id = $1`, [id]);
+      await creditRefundForOrder(c, rows[0].order_id, {
+        amountPaise: Math.round(amount) * 100, sku: rq[0]?.item_sku, returnId: id,
+        reason: `Refund for return ${id}`, actor: req.user?.email ?? 'admin',
+      });
     });
 
     res.json(await loadReturn(id));

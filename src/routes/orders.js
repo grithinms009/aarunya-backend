@@ -17,6 +17,10 @@ import { notFound, ruleError, wrap } from '../lib/errors.js';
 import { parseBody, parseQuery } from '../middleware/validate.js';
 import { NEXT_STEP } from '../lib/reference.js';
 import { nextOrderNo } from '../lib/orderno.js';
+import { getGst, invoicingStatus } from '../lib/gstSettings.js';
+import { buildOrderTax } from '../lib/orderTax.js';
+import { cancelInvoiceForOrder, issueInvoice, owesInvoiceAtDispatch } from '../lib/invoice.js';
+import { stateByCode } from '../lib/gst.js';
 
 export const router = Router();
 
@@ -156,6 +160,14 @@ router.post('/:orderNo/advance', parseBody(shipmentIn), wrap(async (req, res) =>
       throw ruleError('Add the courier and tracking number first');
     }
 
+    /* The tax invoice must exist at or before removal of the goods (CGST Act s.31(1)), so it
+       is issued in the same transaction as the move to "shipped". If it cannot be issued —
+       a product is still unclassified, say — the order does not ship. */
+    if (next === 'shipped' && o.channel === 'online' && owesInvoiceAtDispatch(o)
+        && invoicingStatus(await getGst(c)).active) {
+      await issueInvoice(c, id, { actor: req.user?.email ?? 'admin' });
+    }
+
     await c.query(`UPDATE "order" SET status = $2, updated_at = now() WHERE id = $1`, [id, next]);
     if (next === 'shipped' && !o.ship_awb) {
       await c.query(
@@ -197,7 +209,8 @@ router.post('/:orderNo/payment/mark-paid', wrap(async (req, res) => {
   const id = req.params.orderNo;
   await tx(async (c) => {
     const { rows } = await c.query(
-      `UPDATE "order" SET pay_status = 'paid', updated_at = now()
+      `UPDATE "order" SET pay_status = 'paid', paid_at = COALESCE(paid_at, now()),
+              paid_paise = CASE WHEN paid_paise = 0 THEN total * 100 ELSE paid_paise END, updated_at = now()
         WHERE id = $1 RETURNING status`, [id]);
     if (!rows.length) throw notFound('That order no longer exists');
     await c.query(`INSERT INTO order_history (order_id, status, note) VALUES ($1,$2,$3)`,
@@ -242,6 +255,13 @@ router.post('/:orderNo/cancel', wrap(async (req, res) => {
        WHERE id = $1`, [id]);
     await c.query(`INSERT INTO order_history (order_id, status, note) VALUES ($1,'cancelled',$2)`,
       [id, 'Cancelled by admin. Items added back to stock.']);
+    /* An invoice that was already issued is never edited or deleted: it is cancelled with a
+       credit note, and its number stays on file. */
+    const note = await cancelInvoiceForOrder(c, id, 'Order cancelled', req.user?.email ?? 'admin');
+    if (note) {
+      await c.query(`INSERT INTO order_history (order_id, status, note) VALUES ($1,'cancelled',$2)`,
+        [id, `Credit note ${note.note_no} issued against the tax invoice`]);
+    }
   });
 
   res.json({ ok: true });
@@ -318,6 +338,42 @@ router.post('/offline-sales', parseBody(saleIn), wrap(async (req, res) => {
       `INSERT INTO order_history (order_id, status, note, at) VALUES ($1,'completed',$2,$3)`,
       [orderNo, `Offline sale · ${input.location}`, at],
     );
+
+    /* A counter sale is delivered on the spot, so its tax invoice is issued with the sale
+       (supply is within the supplier's own state). If a piece is not yet classified the sale
+       is still recorded and the invoice is generated from the Invoices screen once it is. */
+    const gst = await getGst(c);
+    if (invoicingStatus(gst).active) {
+      const { rows: prods } = await c.query(
+        `SELECT id, hsn_code, gst_rate_bp, hsn_status FROM product WHERE id = ANY($1)`,
+        [input.lines.map((l) => l.pid)]);
+      const byId = new Map(prods.map((p) => [p.id, p]));
+      const ownState = stateByCode(gst.stateCode).name;
+      const t = buildOrderTax({
+        gst, deliveryState: ownState, billingState: ownState, discountRupees: discount, forceInclusive: true,
+        lines: input.lines.map((l) => {
+          const p = byId.get(l.pid);
+          return { pid: l.pid, name: l.name, qty: l.qty, priceRupees: l.price, hsn: p?.hsn_code ?? '',
+            gstRateBp: p?.gst_rate_bp ?? null, hsnStatus: p?.hsn_status ?? 'unverified' };
+        }),
+      });
+      if (t.applied && t.result.totals.grandTotal === (subtotal - discount) * 100) {
+        await c.query(
+          `UPDATE "order" SET gst_applied = TRUE, tax_type = $2, price_mode = 'inclusive', place_of_supply = $3,
+             state = $4, taxable_paise = $5, cgst_paise = $6, sgst_paise = $7, igst_paise = $8, round_off_paise = 0,
+             grand_total_paise = $9, tax_breakup = $10, paid_paise = total * 100, paid_at = now() WHERE id = $1`,
+          [orderNo, t.result.taxType, t.pos.pos.code, ownState, t.result.totals.taxable, t.result.totals.cgst,
+           t.result.totals.sgst, t.result.totals.igst, t.result.totals.grandTotal,
+           JSON.stringify({ supplierStateCode: gst.stateCode, pos: { code: t.pos.pos.code, name: t.pos.pos.name },
+             stateTaxLabel: t.pos.stateTaxLabel, result: t.result })]);
+        await issueInvoice(c, orderNo, { actor: req.user?.email ?? 'admin' });
+      } else {
+        await c.query(`UPDATE "order" SET tax_issues = $2, paid_paise = total * 100, paid_at = now() WHERE id = $1`,
+          [orderNo, JSON.stringify(t.issues ?? [])]);
+      }
+    } else {
+      await c.query(`UPDATE "order" SET paid_paise = total * 100, paid_at = now() WHERE id = $1`, [orderNo]);
+    }
     return orderNo;
   });
 

@@ -78,6 +78,9 @@ elif [ -f "$DUMP" ]; then
   echo "restored $(docker exec aarunya-postgres psql -U aarunya -d aarunya -t -A -c 'select count(*) from product') products"
   # The dump carries no accounts on purpose — see deploy/create-accounts.mjs.
   node deploy/create-accounts.mjs
+  # The dump predates GST invoicing: apply the additive migrations (GST columns, invoice
+  # tables) on top of the restored copy. Idempotent, and recorded in schema_migration.
+  npm run db:migrate
 elif [ "$FRESH" = "1" ]; then
   npm run db:migrate && npm run db:seed
   echo "started empty, as --fresh asked"

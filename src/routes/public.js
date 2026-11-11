@@ -17,6 +17,14 @@ import { readContent } from './storefront.js';
 import { badRequest, notFound, ruleError, wrap } from '../lib/errors.js';
 import { parseBody, parseQuery } from '../middleware/validate.js';
 import { LIMITS } from '../lib/limits.js';
+import { getGst } from '../lib/gstSettings.js';
+import { buildOrderTax, publicTax } from '../lib/orderTax.js';
+import { GstError, resolveState, stateByCode, validateGstin } from '../lib/gst.js';
+import { liveInvoiceFor } from '../lib/invoice.js';
+import { invoiceDoc, renderDocument } from '../lib/invoicePdf.js';
+import { validation } from '../lib/errors.js';
+import { lookupPin, resolveDelivery, zoneFor } from '../lib/pincode.js';
+import { shippingFee } from '../lib/shipping.js';
 
 export const router = Router();
 
@@ -105,7 +113,7 @@ async function priceLines(items) {
   if (!items.length) return [];
   const { rows } = await query(
     `SELECT v.id AS vid, v.stock, v.sku, v.color_key, p.id AS pid, p.name, p.slug,
-            p.price, p.mrp, p.status, p.gift_wrap,
+            p.price, p.mrp, p.status, p.gift_wrap, p.hsn_code, p.gst_rate_bp, p.hsn_status,
             (SELECT i.url FROM variant_image i WHERE i.variant_id = v.id ORDER BY i.slot LIMIT 1) AS img
        FROM variant v JOIN product p ON p.id = v.product_id
       WHERE v.id = ANY($1)`,
@@ -124,6 +132,7 @@ async function priceLines(items) {
       productId: v.pid, variantId: v.vid, slug: v.slug, name: v.name,
       color: v.color_key, sku: v.sku, img: v.img ?? '',
       price: v.price, mrp: v.mrp, stock: v.stock, qty,
+      hsn: v.hsn_code, gstRateBp: v.gst_rate_bp, hsnStatus: v.hsn_status,
       ok: qty > 0 && qty === i.qty,
       reason: v.stock === 0 ? 'out_of_stock' : qty < i.qty ? 'reduced' : '',
     };
@@ -131,26 +140,69 @@ async function priceLines(items) {
 }
 
 /** Totals from the store's own settings — the client never decides these. */
-function totalsFor(lines, config, giftWrap) {
+function totalsFor(lines, config, giftWrap, zone = null) {
   const subtotal = lines.reduce((t, l) => t + l.price * l.qty, 0);
   const threshold = num(config.FREE_SHIPPING_THRESHOLD);
-  const fee = num(config.SHIPPING_FEE);
+  const fee = zone ? shippingFee(config, zone) : num(config.SHIPPING_FEE);
   const shipping = subtotal > 0 && subtotal < threshold ? fee : 0;
   const giftFee = giftWrap ? num(config.GIFT_WRAP_FEE) : 0;
   return { subtotal, shipping, giftFee, total: subtotal + shipping + giftFee };
 }
 
-/** POST /cart — re-prices and re-checks stock server-side. */
-router.post('/cart', parseBody(cartItems.extend({ giftWrap: z.boolean().default(false) })),
-  wrap(async (req, res) => {
-    const lines = await priceLines(req.body.items);
-    const config = await getConfig();
-    res.json({
-      ok: lines.every((l) => l.ok),
-      items: lines,
-      ...totalsFor(lines, config, req.body.giftWrap),
+/** Tax for a priced cart, or {applied:false}. Never throws for a missing state: the cart
+ *  simply has no breakup until the delivery state is known. */
+function taxForLines(gst, lines, config, giftWrap, delivery, billingState) {
+  const live = lines.filter((l) => l.qty > 0);
+  if (!live.length || !delivery.state) return { applied: false, reason: 'state' };
+  const base = totalsFor(live, config, giftWrap, delivery.zone);
+  try {
+    return buildOrderTax({
+      gst, lines: live.map((l) => ({ ...l, priceRupees: l.price })),
+      deliveryState: delivery.state.name, billingState: billingState || delivery.state.name,
+      shippingRupees: base.shipping, giftFeeRupees: base.giftFee,
     });
-  }));
+  } catch (e) {
+    if (e instanceof GstError) return { applied: false, reason: e.code };
+    throw e;
+  }
+}
+
+/** POST /cart — re-prices and re-checks stock server-side. With `state` it also returns the
+ *  authoritative GST breakup; the browser only displays it. */
+router.post('/cart', parseBody(cartItems.extend({
+  giftWrap: z.boolean().default(false),
+  state: z.string().trim().max(120).optional(),
+  pin: z.string().trim().max(10).optional(),
+})), wrap(async (req, res) => {
+  const lines = await priceLines(req.body.items);
+  const config = await getConfig();
+  const gst = await getGst();
+  /* The PIN decides the delivery state and the shipping zone. A bad PIN does not fail the
+     cart; it is reported next to the field and the cart is priced at the standard rate. */
+  let delivery = { state: null, pin: null, zone: null };
+  let pinError = '';
+  try {
+    delivery = resolveDelivery({ pin: req.body.pin, state: req.body.state, supplierStateCode: gst.stateCode });
+  } catch (e) {
+    if (e.status !== 422) throw e;
+    pinError = e.message;
+  }
+  const base = totalsFor(lines, config, req.body.giftWrap, delivery.zone);
+  const t = taxForLines(gst, lines, config, req.body.giftWrap, delivery, delivery.state?.name);
+  res.json({
+    ok: lines.every((l) => l.ok),
+    items: lines,
+    ...base,
+    delivery: {
+      pin: delivery.pin?.pin ?? '', pinError, zone: delivery.zone,
+      state: delivery.state ? { code: delivery.state.code, name: delivery.state.name } : null,
+      district: delivery.pin?.district ?? '',
+    },
+    /* In GST-exclusive mode the payable total includes the tax (and a rupee round-off). */
+    total: t.applied ? t.result.totals.grandTotal / 100 : base.total,
+    tax: publicTax(t),
+  });
+}));
 
 /* ---------------------------------------------------------------- checkout */
 
@@ -165,6 +217,15 @@ const orderIn = z.object({
     city: z.string().trim().max(120).optional().default(''),
     state: z.string().trim().max(120).optional().default(''),
     pin: z.string().trim().max(10).optional().default(''),
+    /* Billing details, when they differ from the delivery address. */
+    billing: z.object({
+      name: z.string().trim().max(120).optional().default(''),
+      address: z.string().trim().max(300).optional().default(''),
+      city: z.string().trim().max(120).optional().default(''),
+      state: z.string().trim().max(120).optional().default(''),
+      pin: z.string().trim().max(10).optional().default(''),
+      gstin: z.string().trim().toUpperCase().max(15).optional().default(''),
+    }).optional(),
   }),
   items: z.array(z.object({
     productId: z.string().max(120),
@@ -194,6 +255,21 @@ router.post('/orders', checkoutLimiter, parseBody(orderIn), wrap(async (req, res
   }
 
   const config = await getConfig();
+  const gst = await getGst();
+  const billing = customer.billing ?? {};
+  if (billing.gstin && !validateGstin(billing.gstin).ok) {
+    throw validation({ gstin: 'Check the GSTIN' }, 'Check the GSTIN');
+  }
+  /* The delivery state decides the tax. Once GST is on, an unknown state is refused. */
+  const gstOn = gst.registered && gst.verified;
+  /* The PIN (India Post directory) fixes the delivery state and the shipping zone. */
+  const delivery = resolveDelivery({
+    pin: customer.pin, state: customer.state, supplierStateCode: gst.stateCode, requirePin: gstOn,
+  });
+  if (gstOn && !delivery.state) {
+    throw validation({ state: 'Choose the delivery state' }, 'Choose the delivery state');
+  }
+  if (delivery.state) customer.state = delivery.state.name; // stored in the standard spelling
 
   const orderNo = await tx(async (c) => {
     /* Lock every variant first, so two checkouts can't oversell the same piece. */
@@ -201,6 +277,7 @@ router.post('/orders', checkoutLimiter, parseBody(orderIn), wrap(async (req, res
     for (const i of items) {
       const { rows } = await c.query(
         `SELECT v.id, v.stock, v.sku, v.color_key, p.id AS pid, p.name, p.price, p.status,
+                p.hsn_code, p.gst_rate_bp, p.hsn_status,
                 (SELECT im.url FROM variant_image im WHERE im.variant_id = v.id ORDER BY im.slot LIMIT 1) AS img
            FROM variant v JOIN product p ON p.id = v.product_id
           WHERE v.id = $1 FOR UPDATE OF v`,
@@ -219,9 +296,27 @@ router.post('/orders', checkoutLimiter, parseBody(orderIn), wrap(async (req, res
       return {
         pid: v.pid, vid: v.id, name: v.name, color: v.color_key, sku: v.sku,
         qty: i.qty, price: v.price, img: v.img ?? '',
+        hsn: v.hsn_code, gstRateBp: v.gst_rate_bp, hsnStatus: v.hsn_status,
       };
     });
-    const { subtotal, shipping, giftFee, total } = totalsFor(lines, config, giftWrap);
+    const totals0 = totalsFor(lines, config, giftWrap, delivery.zone);
+    const { subtotal, shipping, giftFee } = totals0;
+
+    /* GST: computed here, from the catalogue's verified classification and the delivery state. */
+    const taxIn = buildOrderTax({
+      gst, lines: lines.map((l) => ({ ...l, pid: l.pid, priceRupees: l.price })),
+      deliveryState: customer.state, billingState: billing.state || customer.state,
+      shippingRupees: shipping, giftFeeRupees: giftFee,
+    });
+    if (!taxIn.applied && taxIn.reason === 'unclassified' && gst.priceMode === 'exclusive') {
+      /* Tax would have to be added on top, and cannot be for an unverified product. */
+      throw ruleError('A piece in your cart cannot be sold yet: ' + taxIn.issues[0].name);
+    }
+    const total = taxIn.applied ? taxIn.result.totals.grandTotal / 100 : totals0.total;
+    if (!Number.isInteger(total)) throw ruleError('Order total must be a whole rupee amount');
+    if (taxIn.applied && gst.priceMode === 'inclusive' && total !== totals0.total) {
+      throw ruleError('Tax calculation does not reconcile with the order total');
+    }
 
     const id = await nextOrderNo(c, 'online');
     /* The shopper's private handle on this order. Knowing the order number is not
@@ -240,12 +335,35 @@ router.post('/orders', checkoutLimiter, parseBody(orderIn), wrap(async (req, res
        config.PAYMENT_PROVIDER ?? null, token],
     );
 
+    /* Tax snapshot, frozen on the order: later catalogue or settings edits never touch it. */
+    const ti = taxIn.applied ? taxIn.result.totals : null;
+    await c.query(
+      `UPDATE "order" SET gst_applied = $2, tax_type = $3, price_mode = $4, place_of_supply = $5,
+         taxable_paise = $6, cgst_paise = $7, sgst_paise = $8, igst_paise = $9, round_off_paise = $10,
+         grand_total_paise = $11, tax_breakup = $12, tax_issues = $13,
+         bill_name = $14, bill_address = $15, bill_city = $16, bill_state = $17, bill_pin = $18, bill_gstin = $19
+       WHERE id = $1`,
+      [id, taxIn.applied, taxIn.applied ? taxIn.result.taxType : '', taxIn.applied ? taxIn.result.mode : '',
+       taxIn.applied ? taxIn.pos.pos.code : '',
+       ti?.taxable ?? null, ti?.cgst ?? null, ti?.sgst ?? null, ti?.igst ?? null, ti?.roundOff ?? null,
+       ti?.grandTotal ?? null,
+       taxIn.applied ? JSON.stringify({ supplierStateCode: gst.stateCode,
+         pos: { code: taxIn.pos.pos.code, name: taxIn.pos.pos.name }, stateTaxLabel: taxIn.pos.stateTaxLabel,
+         result: taxIn.result }) : null,
+       /* GST was on but could not be applied (unverified product): recorded so the invoice is
+          still owed at dispatch once the product is classified. */
+       !taxIn.applied && taxIn.reason === 'unclassified' ? JSON.stringify(taxIn.issues) : null,
+       billing.name || '', billing.address || '', billing.city || '', billing.state || '', billing.pin || '',
+       billing.gstin || ''],
+    );
+
     let n = 0;
     for (const l of lines) {
       await c.query(
-        `INSERT INTO order_item (order_id, product_id, variant_id, name, color_key, sku, qty, price, img, sort_order)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [id, l.pid, l.vid, l.name, l.color, l.sku, l.qty, l.price, l.img, n++],
+        `INSERT INTO order_item (order_id, product_id, variant_id, name, color_key, sku, qty, price, img, sort_order,
+           hsn_code, gst_rate_bp)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [id, l.pid, l.vid, l.name, l.color, l.sku, l.qty, l.price, l.img, n++, l.hsn ?? '', l.gstRateBp ?? null],
       );
       /* The stock leaves the shelf when the order is placed, as the admin's POS does. */
       await applyStock(c, l.vid, -l.qty, 'online', id);
@@ -277,32 +395,21 @@ router.get('/delivery/estimate', parseQuery(z.object({ pin: z.string().max(10) }
     if (!/^[1-9]\d{5}$/.test(pin)) return res.json({ ok: false });
 
     const config = await getConfig();
-    const prefixes = config.HOME_STATE_PIN_PREFIXES ?? [];
+    const gst = await getGst();
+    /* The India Post directory says where the PIN is; "local" means the home state. */
+    const info = lookupPin(pin);
+    if (!info) return res.json({ ok: false, reason: 'unknown_pin' });
+    if (!info.deliverable) return res.json({ ok: false, reason: 'no_delivery' });
     const days = config.DELIVERY_DAYS ?? { local: [2, 3], rest: [4, 7] };
-    const local = prefixes.some((x) => pin.startsWith(String(x)));
+    const local = info.codes.length === 1 && info.codes[0] === gst.stateCode;
     const [minDays, maxDays] = days[local ? 'local' : 'rest'] ?? [4, 7];
-    res.json({ ok: true, pin, minDays, maxDays, cod: false });
+    const zone = info.codes.length === 1 ? zoneFor(info.codes[0], gst.stateCode) : null;
+    const fee = zone ? shippingFee(config, zone) : num(config.SHIPPING_FEE);
+    res.json({
+      ok: true, pin, minDays, maxDays, cod: false, district: info.district, zone, shippingFee: fee,
+      state: info.codes.length === 1 ? stateByCode(info.codes[0]).name : null,
+    });
   }));
-
-/* ---------------------------------------------------------------- payments */
-
-/** POST /payments/create — no gateway is configured, and this says so rather than
- *  pretending a payment succeeded. Wire a provider here when one is chosen. */
-router.post('/payments/create', parseBody(z.object({
-  orderId: z.string().max(60),
-  amount: z.coerce.number().min(0).optional(),
-})), wrap(async (req, res) => {
-  const order = await loadOrder(req.body.orderId);
-  if (!order) throw notFound('That order no longer exists');
-  const config = await getConfig();
-  res.json({
-    status: 'GATEWAY_NOT_CONFIGURED',
-    provider: config.PAYMENT_PROVIDER ?? 'razorpay',
-    orderId: order.id,
-    /* The server's amount, never the client's. */
-    amount: order.total,
-  });
-}));
 
 /* ---------------------------------------------------------------- tracking */
 
@@ -356,6 +463,7 @@ router.get('/orders/:orderNo/track', trackLimiter,
     const { rows: history } = await query(
       `SELECT status, note, at FROM order_history WHERE order_id = $1 ORDER BY at`, [o.id]);
 
+    const invoiceInfo = await liveInvoiceFor({ query }, o.id);
     const courier = (config) => (config.couriers ?? []).find((c) => c.id === o.courier);
     const settings = await getConfig();
     const c = courier(settings);
@@ -379,8 +487,29 @@ router.get('/orders/:orderNo/track', trackLimiter,
           }
         : null,
       returnRequest: o.return_id ? { id: o.return_id, status: o.return_status } : null,
+      invoice: invoiceInfo ? { number: invoiceInfo.invoice_no, issuedAt: invoiceInfo.issued_at } : null,
       history: history.map((h) => ({ status: h.status, note: h.note, at: h.at })),
     });
+  }));
+
+/** GET /orders/{orderNo}/invoice?token=… — the customer's own tax invoice, as a PDF. Same
+ *  secret as tracking; an order without an issued invoice has nothing to download. */
+router.get('/orders/:orderNo/invoice', trackLimiter,
+  parseQuery(z.object({ token: z.string().min(8).max(200) })),
+  wrap(async (req, res) => {
+    const { rows } = await query(`SELECT id, access_token FROM "order" WHERE id = $1`, [req.params.orderNo]);
+    const o = rows[0];
+    if (!o || !tokenMatches(req.valid.token, o.access_token)) {
+      throw notFound('We could not find an order with those details');
+    }
+    const { rows: inv } = await query(
+      `SELECT * FROM invoice WHERE order_id = $1 ORDER BY (status = 'issued') DESC, id DESC LIMIT 1`, [o.id]);
+    if (!inv[0]) throw notFound('The tax invoice is issued when your order is dispatched');
+    const pdf = await renderDocument(invoiceDoc(inv[0]));
+    res.set({ 'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${inv[0].invoice_no.replace(/\//g, '-')}.pdf"`,
+      'Cache-Control': 'private, no-store' });
+    res.send(pdf);
   }));
 
 /**

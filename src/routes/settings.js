@@ -88,6 +88,11 @@ router.put('/', parseBody(saveIn), wrap(async (req, res) => {
       INSTAGRAM_HANDLE: String(c.INSTAGRAM_HANDLE ?? ''),
       FREE_SHIPPING_THRESHOLD: num(c.FREE_SHIPPING_THRESHOLD),
       SHIPPING_FEE: num(c.SHIPPING_FEE),
+      /* Per-zone rates by delivery PIN: home state, rest of India, remote. Blank = SHIPPING_FEE. */
+      SHIPPING_RATES: Object.fromEntries(['home', 'rest', 'remote'].map((z) => {
+        const v = c.SHIPPING_RATES?.[z];
+        return [z, v === '' || v === undefined || v === null ? '' : Math.max(0, num(v))];
+      })),
       GIFT_WRAP_FEE: num(c.GIFT_WRAP_FEE),
       DISPATCH_CUTOFF_HOUR: num(c.DISPATCH_CUTOFF_HOUR),
       PAYMENT_PROVIDER: String(c.PAYMENT_PROVIDER ?? 'razorpay'),

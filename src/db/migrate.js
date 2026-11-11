@@ -1,7 +1,7 @@
 /* Applies schema.sql. With --reset it drops the public schema first, which is what
    db:reset does for local development. */
 import 'dotenv/config';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { pool } from './pool.js';
@@ -32,14 +32,38 @@ async function main() {
   const { rows } = await pool.query(
     `SELECT to_regclass('public.app_user') AS t`,
   );
-  if (rows[0].t && !reset) {
-    console.log('schema already present — nothing to do (use --reset to rebuild)');
-    await pool.end();
-    return;
+  if (!rows[0].t) {
+    await pool.query(readFileSync(join(here, 'schema.sql'), 'utf8'));
+    console.log('schema applied');
+  } else {
+    console.log('base schema already present');
   }
 
-  await pool.query(readFileSync(join(here, 'schema.sql'), 'utf8'));
-  console.log('schema applied');
+  /* Numbered, additive migrations. Each runs once, in its own transaction, and is recorded.
+     An existing store is upgraded in place: nothing is dropped or rewritten. Take a backup
+     first (npm run db:snapshot). */
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS schema_migration (name TEXT PRIMARY KEY, at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+  const dir = join(here, 'migrations');
+  const files = readdirSync(dir).filter((f) => /^\d+_.*\.sql$/.test(f) && !f.endsWith('.down.sql')).sort();
+  for (const f of files) {
+    const name = f.replace(/\.sql$/, '');
+    const done = await pool.query(`SELECT 1 FROM schema_migration WHERE name = $1`, [name]);
+    if (done.rows.length) continue;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(readFileSync(join(dir, f), 'utf8'));
+      await client.query(`INSERT INTO schema_migration (name) VALUES ($1)`, [name]);
+      await client.query('COMMIT');
+      console.log(`migration applied: ${name}`);
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
   await pool.end();
 }
 

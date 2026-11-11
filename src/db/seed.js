@@ -18,6 +18,7 @@ const USER_PASSWORD = process.env.SEED_USER_PASSWORD || 'user12345';
 
 /* Cleared in dependency order. */
 const TABLES = [
+  'invoice_event', 'credit_note', 'invoice', 'invoice_sequence', 'payment_event',
   'stock_ledger', 'return_history', 'return_request',
   'order_history', 'shipment', 'order_item', '"order"',
   'variant_image', 'variant', 'product_spec', 'product',

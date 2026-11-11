@@ -78,10 +78,36 @@ APIs — colours, a category, products, a storefront order — and then exercise
 against it. The create paths are therefore covered too: if adding a category or a product
 breaks, this fails before it ever reaches a rule.
 
-80 checks, covering order numbering, the stock and ledger invariants, the order-flow guards,
+`npm test` runs three suites: the pure GST engine (`test/gst.engine.test.mjs`), the original
+rules suite, and the GST / invoice / Razorpay API suite (`test/gst.api.test.mjs`, which starts its
+own API on :4100 and a fake Razorpay on :4101). It resets the database first.
+
+The original suite — 80 checks, covering order numbering, the stock and ledger invariants, the order-flow guards,
 cart re-pricing, checkout totals and oversell protection, delivery estimates, adjustment
 clamping, product validation, the return state machine and its stock effects, uploads
 (including a file disguised as an image), and the auth rules.
+
+## GST, tax invoices and payments
+
+All tax is computed here, in integer paise (`src/lib/gst.js`); the storefront and admin only
+display it. See `docs/GST.md` for the rules implemented, the legal sources, and what the
+owner / CA still has to confirm. In short:
+
+- **Off until verified.** Invoicing is locked until an admin records the registered legal name
+  and address and confirms the GSTIN on the official GST portal (GST & Invoices → Settings).
+- **Place of supply** is the delivery state (IGST Act s.10(1)(a)); same state as the supplier
+  → CGST + SGST, otherwise IGST. Never both.
+- **Pricing mode** is configurable; today's prices are GST-inclusive and unchanged.
+- **Invoices** are immutable snapshots issued at dispatch, numbered `AJ/26-27/0001`
+  atomically per financial year; corrections are credit notes (`AJC/26-27/0001`).
+- **Razorpay**: set `RAZORPAY_*` in `.env`. The server creates the gateway order for the
+  amount it computed, verifies the checkout signature, re-fetches the payment from Razorpay
+  and checks order id / amount / currency / captured before marking an order paid; the
+  webhook is signature-verified and idempotent.
+
+Upgrading an existing database: `npm run db:snapshot`, then `npm run db:migrate` (applies
+`src/db/migrations/*.sql` once each, additive; `001_gst_invoicing.down.sql` reverses it while no
+invoice exists).
 
 ## Layout
 

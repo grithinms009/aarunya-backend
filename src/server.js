@@ -23,6 +23,8 @@ import { errorHandler, notFoundHandler } from './middleware/error.js';
 
 import { router as authRoutes } from './routes/auth.js';
 import { router as publicRoutes } from './routes/public.js';
+import { router as paymentRoutes } from './routes/payments.js';
+import { router as gstRoutes } from './routes/gst.js';
 import { router as metaRoutes } from './routes/meta.js';
 import { router as dashboardRoutes } from './routes/dashboard.js';
 import { router as productRoutes } from './routes/products.js';
@@ -62,7 +64,8 @@ app.use(cors({
 }));
 
 /* Product and banner images arrive as data URLs until object storage is wired up. */
-app.use(express.json({ limit: '12mb' }));
+/* rawBody is kept for the payment webhook, whose signature is computed over the exact bytes. */
+app.use(express.json({ limit: '12mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(cookieParser());
 app.use(morgan('tiny'));
 app.use(readSession);
@@ -98,6 +101,7 @@ app.get('/health', async (_req, res) => {
    turn an ordinary shopper request into a forbidden one. */
 app.use('/api/auth', csrfGuard, authRoutes);
 app.use('/api', publicRoutes);
+app.use('/api', paymentRoutes);
 
 /* Everything below needs a signed-in admin. */
 const admin = express.Router();
@@ -112,6 +116,7 @@ admin.use('/orders', orderRoutes);
 admin.use('/returns', returnRoutes);
 admin.use('/customers', customerRoutes);
 admin.use('/settings', settingsRoutes);
+admin.use('/gst', gstRoutes);
 admin.use('/storefront-content', contentRoutes);
 admin.use('/uploads', mediaRoutes);
 admin.use('/messages', contactRoutes);
