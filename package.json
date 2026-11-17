@@ -13,7 +13,8 @@
     "test": "node test/gst.engine.test.mjs && node test/rules.test.mjs && node test/gst.api.test.mjs",
     "db:snapshot": "node scripts/snapshot.mjs",
     "db:restore": "node scripts/restore.mjs",
-    "test:gst": "node test/gst.engine.test.mjs && node test/gst.api.test.mjs"
+    "test:gst": "node test/gst.engine.test.mjs && node test/gst.api.test.mjs",
+    "gst:golive": "node scripts/gst-golive.mjs"
   },
   "dependencies": {
     "@fontsource/noto-sans": "^5.1.0",

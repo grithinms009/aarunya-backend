@@ -11,7 +11,7 @@ cannot settle and **Veena or her CA must confirm** before invoices are switched 
 | Orders | `subtotal + shipping + gift fee − discount = total`, INTEGER rupees. One free-text delivery address. |
 | Payments | `POST /payments/create` returned `GATEWAY_NOT_CONFIGURED`. **No Razorpay code existed server-side**: no order creation, no signature verification, no webhook. "Paid" was set only by an admin clicking "mark paid". |
 | Invoice | A client-side print in the admin (`aarunya-admin/src/lib/invoice.ts`): no GSTIN, HSN or tax split; it said "Prices include all taxes". It was not a tax invoice. |
-| Business data | Storefront `businessInfo.ts` has `gstin: null` and says the shop is not GST-registered; the admin config holds `EMAIL = Aarunyajewelsbyveena@gmail.com`. |
+| Business data | Storefront `businessInfo.ts` had `gstin: null` and said the shop was not GST-registered. Now set to `32BTBPG5961M1ZK` (see §3a). |
 
 ## 2. Defects found in the two sample invoices
 
@@ -29,13 +29,30 @@ cannot settle and **Veena or her CA must confirm** before invoices are switched 
 | Structure, state code 32 = Kerala, mod-36 check digit | ✅ valid (`validateGstin`) |
 | PAN part `BTBPG5961M`, 4th character `P` | ✅ consistent with an individual / sole proprietor |
 | Active status, legal name, trade name, constitution, registered address, ownership by Veena | ❌ **NOT verified.** The portal lookup (services.gst.gov.in → Search Taxpayer) requires an interactive captcha, so an automated client cannot complete it. |
-| Email | ⚠ Samples show `Click2veena@gmail.com`; the app is configured with `Aarunyajewelsbyveena@gmail.com`. Left **blank** in GST settings — choose the one that is on the registration. |
-| Consistency | ⚠ The storefront code states the shop is **not** GST-registered (`MERCHANT.gstin = null`). Either the registration is recent or the samples are wrong; reconcile and update the Terms/policy pages once confirmed. |
+| Email | ✅ Owner chose `Aarunyajewelsbyveena@gmail.com` for invoices (2026-11-17). Samples show `Click2veena@gmail.com`. |
+| Consistency | ✅ Registration confirmed by the owner (2026-11-17). The storefront now sets `MERCHANT.gstin`, so the footer, Terms, Contact, checkout GSTIN field and Track Order invoice section show it. |
 
-**Therefore production invoicing is locked.** The GSTIN is pre-filled as a *candidate* only; legal name and
-registered address are empty (nothing is invented). Someone must open the GST portal, check the record,
-type the legal name / trade name / address exactly as shown, and press **Verify** (with a note saying where
+**Production invoicing stays locked until a person verifies on the portal.** `DEFAULT_GST` still invents
+nothing; `npm run gst:golive` fills the confirmed facts below into the settings row. Someone must then open the
+GST portal, compare the record, correct any field that differs, and press **Verify** (with a note saying where
 and when it was checked). Any later change to those fields voids the verification.
+
+### 3a. Facts confirmed 2026-11-17 (applied by `npm run gst:golive`)
+
+| Field | Value | Source |
+|---|---|---|
+| Registration | Regular taxpayer (not composition) | owner |
+| GSTIN / state | `32BTBPG5961M1ZK` / 32-Kerala | sample invoices |
+| Legal name | `Veena G` | `businessInfo.ts` MERCHANT.legalName — ⚠ must match the PAN/GST record exactly |
+| Trade name | `Aarunya Jewels by Veena` | BRAND_NAME (samples print the handle `Aarunya_jewels_byveena`) — ⚠ check against certificate |
+| Address | Edappon, Mavelikara, Alappuzha, Kerala 690558 | `businessInfo.ts` ADDRESS — ⚠ must match the principal place of business |
+| Phone / email | 9747738193 / Aarunyajewelsbyveena@gmail.com | samples / owner |
+| Prices | GST-inclusive | samples |
+| HSN / rate | 7117 (imitation jewellery) @ 3%, all products | owner, CA-confirmed |
+| Numbering | Website series `AJ/26-27/0001…` runs alongside the billing app's own series (#95, #99, …). Separate consecutive series are permitted (Rule 46(b)); the counter is **not** moved. | |
+
+The script fills only empty fields, never sets `verified`, and reports (does not overwrite) any saved value
+that differs from the table — run it with `--dry-run` first.
 
 ## 4. Rules implemented, and where they came from
 
@@ -49,15 +66,15 @@ the items marked ⚠ rest partly on secondary summaries and need the CA to read 
 | Place of supply | Where movement of goods terminates = **delivery state** (IGST Act s.10(1)(a)). Billing state is stored separately. Delivery on a *third person's direction* (s.10(1)(b)) uses the billing state — engine supports it (`thirdPartyDirection`), not exposed to shoppers. | ⚠ CA to confirm for B2B bill-to/ship-to cases |
 | Discounts | Applied before GST (s.15(3)(a)); order-level discount spread over lines (largest remainder). | ✅ |
 | Shipping / packing / gift wrap | Treated as incidental charges forming part of the value of supply (s.15(2)(c)) taking the principal supply's rate (s.8); in a mixed-rate basket apportioned by goods value. | ⚠ CA to confirm treatment (alternative: highest rate) |
-| Rate for jewellery | Engine takes the rate from each product. Reference panel shows 7113 / 7117 at 3%. | ⚠ **Unverified.** Secondary sources say 3% for both after 22 Sep 2025; a 2017 CBIC booklet I could open lists 7117 in a different slab, and some blogs say 18%. Read the current Notification 1/2017-CT(Rate) as amended before verifying any product. |
-| Classification | **No product is auto-classified.** 7113 = jewellery of precious metal / metal clad with precious metal; 7117 = imitation jewellery. The shipped catalogue describes everything as "Gold-tone metal" (some with faux pearl/stones), which points to 7117, but the base metal and any plating are not recorded. | ⚠ CA decides per product |
+| Rate for jewellery | Engine takes the rate from each product. Reference panel shows 7113 / 7117 at 3%. | ✅ 7117 @ 3% confirmed by Veena's CA (2026-11-17). Earlier note: ⚠ **Unverified.** Secondary sources say 3% for both after 22 Sep 2025; a 2017 CBIC booklet I could open lists 7117 in a different slab, and some blogs say 18%. Read the current Notification 1/2017-CT(Rate) as amended before verifying any product. |
+| Classification | **No product is auto-classified.** 7113 = jewellery of precious metal / metal clad with precious metal; 7117 = imitation jewellery. The shipped catalogue describes everything as "Gold-tone metal" (some with faux pearl/stones), which points to 7117, but the base metal and any plating are not recorded. | ✅ CA confirmed 7117 for the whole catalogue (2026-11-17) |
 | Invoice content | Rule 46 particulars: supplier name/address/GSTIN, number, date, recipient name/address/state, delivery address, HSN, description, qty, unit, taxable value, discount, rate and amount of CGST/SGST/IGST, place of supply, reverse charge, signature. | ✅ |
-| Numbering | `AJ/26-27/0001` ≤ 16 chars, letters/digits/`-`/`/` only, consecutive per FY (Rule 46(b)); atomic UPSERT counter; never reused; credit notes use their own series `AJC/26-27/0001`. The counter can be moved *forward only* (to continue from invoices already issued elsewhere). | ✅ ⚠ confirm the starting number |
+| Numbering | `AJ/26-27/0001` ≤ 16 chars, letters/digits/`-`/`/` only, consecutive per FY (Rule 46(b)); atomic UPSERT counter; never reused; credit notes use their own series `AJC/26-27/0001`. The counter can be moved *forward only* (to continue from invoices already issued elsewhere). | ✅ starts at 0001; the billing app keeps its own separate series (§3a) |
 | Timing | Goods that move: invoice at or before removal (CGST s.31(1)). Issued in the same transaction as marking the order **shipped**; the order will not ship if the invoice cannot be issued (e.g. unclassified product). Counter sales invoice on the spot. A payment confirmation / order email is *not* a tax invoice. | ✅ |
 | Corrections | Issued invoices cannot be edited or deleted (database trigger). Cancellation or refund → credit note (s.34), linked to the invoice, audit-logged. | ⚠ credit notes must be reported in GSTR-1 within the s.34(2) time limit |
 | E-invoice (IRN, dynamic QR) | **Not applicable / not built.** Mandatory from ₹5 crore aggregate turnover (Notif. 10/2023-CT); B2C is outside it anyway. A ₹2 crore reduction was reported as proposed, not notified. | ⚠ re-check if turnover grows |
 | E-way bill | **Not generated.** Needed for consignments over ₹50,000 (Rule 138). Typical orders are far below. | ⚠ an order above ₹50k needs one before dispatch |
-| Composition scheme | ⚠ A composition dealer cannot charge GST or issue a tax invoice (bill of supply instead). Confirm Veena is a **regular** taxpayer. | |
+| Composition scheme | A composition dealer cannot charge GST or issue a tax invoice (bill of supply instead). | ✅ Veena is a **regular** taxpayer (owner, 2026-11-17) |
 | HSN digits | Accepts 4, 6 or 8 digits. ⚠ Confirm the digits required for her turnover (4 for ≤ ₹5 cr turnover B2C; 6 for B2B). | |
 
 ## 5. Pricing model
@@ -71,11 +88,13 @@ taxable ₹207.77 + GST ₹6.23 = ₹214.00; CGST ₹3.12 / SGST ₹3.11 (CGST t
 ## 6. Product-wise HSN / tax mapping
 
 The database in this environment has no products (the catalogue ships as import files; 31 products in
-`catalogue/manifest.json`, all "Gold-tone metal", some with faux pearl / stones). **Nothing was assigned.**
+`catalogue/manifest.json`, all "Gold-tone metal", some with faux pearl / stones). Originally nothing was assigned;
+since 2026-11-17 `npm run gst:golive` classifies every not-yet-verified product as 7117 @ 3%, verified. A product
+added later must be classified in Admin → Product HSN (if it is silver/gold or clad with them, ask the CA — 7113).
 
 | Category (manifest) | Count | Material as recorded | Candidate heading | Needs |
 |---|---|---|---|---|
-| anti-tarnish necklaces, hand chains, hip chains, anklets, bangles, bracelets, rings, earrings, nose rings | 31 | Gold-tone metal (± faux pearl / stone) | 7117 (imitation) — *unless* any item is silver/gold or metal clad with them, then 7113 | Base metal and plating confirmed by Veena; CA confirms heading and current rate |
+| anti-tarnish necklaces, hand chains, hip chains, anklets, bangles, bracelets, rings, earrings, nose rings | 31 | Gold-tone metal (± faux pearl / stone) | 7117 (imitation) — *unless* any item is silver/gold or metal clad with them, then 7113 | ✅ CA confirmed 7117 @ 3% (2026-11-17); applied by `npm run gst:golive` |
 
 Until a product is marked verified (HSN + rate + admin confirmation), the admin sees a warning, the
 storefront shows no tax breakup for it, and an order containing it cannot be dispatched/invoiced.
@@ -106,5 +125,6 @@ reconciles). ⚠ A refund made only in Razorpay does not create a credit note �
 1. `npm run db:snapshot` (backup), then deploy the code and run `npm run db:migrate` (additive; reversible with `001_gst_invoicing.down.sql` while no invoice exists).
 2. `npm install` (adds `pdfkit`, `@fontsource/noto-sans`).
 3. Set `RAZORPAY_KEY_ID / KEY_SECRET / WEBHOOK_SECRET` only when the Razorpay account is live; add the webhook URL `https://<api>/api/payments/webhook` with events `payment.captured`, `payment.failed`, `refund.processed`.
-4. In the admin: GST & Invoices → Settings: enter legal name / address / email from the portal, set the numbering start, **verify**; then Product HSN: classify and verify every product.
+4. `npm run gst:golive -- --dry-run`, review, then `npm run gst:golive` (fills §3a facts, classifies products).
+   Then in the admin: GST & Invoices → Settings: compare with the portal record, correct any difference, **verify**.
 5. Smoke-test one real order end to end before announcing.
