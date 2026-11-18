@@ -29,7 +29,7 @@ cannot settle and **Veena or her CA must confirm** before invoices are switched 
 | Structure, state code 32 = Kerala, mod-36 check digit | ✅ valid (`validateGstin`) |
 | PAN part `BTBPG5961M`, 4th character `P` | ✅ consistent with an individual / sole proprietor |
 | Active status, legal name, trade name, constitution, registered address, ownership by Veena | ❌ **NOT verified.** The portal lookup (services.gst.gov.in → Search Taxpayer) requires an interactive captcha, so an automated client cannot complete it. |
-| Email | ✅ Owner chose `Aarunyajewelsbyveena@gmail.com` for invoices (2026-11-17). Samples show `Click2veena@gmail.com`. |
+| Email | ✅ `Click2veena@gmail.com` is the email on the GST registration and is printed on invoices (owner, 2026-11-18). The storefront's support address, `Aarunyajewelsbyveena@gmail.com`, is the Razorpay account email. |
 | Consistency | ✅ Registration confirmed by the owner (2026-11-17). The storefront now sets `MERCHANT.gstin`, so the footer, Terms, Contact, checkout GSTIN field and Track Order invoice section show it. |
 
 **Production invoicing stays locked until a person verifies on the portal.** `DEFAULT_GST` still invents
@@ -43,10 +43,10 @@ and when it was checked). Any later change to those fields voids the verificatio
 |---|---|---|
 | Registration | Regular taxpayer (not composition) | owner |
 | GSTIN / state | `32BTBPG5961M1ZK` / 32-Kerala | sample invoices |
-| Legal name | `Veena G` | `businessInfo.ts` MERCHANT.legalName — ⚠ must match the PAN/GST record exactly |
+| Legal name | `Veena G` | owner confirmed it is the GST legal name (2026-11-18) |
 | Trade name | `Aarunya Jewels by Veena` | BRAND_NAME (samples print the handle `Aarunya_jewels_byveena`) — ⚠ check against certificate |
 | Address | Edappon, Mavelikara, Alappuzha, Kerala 690558 | `businessInfo.ts` ADDRESS — ⚠ must match the principal place of business |
-| Phone / email | 9747738193 / Aarunyajewelsbyveena@gmail.com | samples / owner |
+| Phone / email | 9747738193 / Click2veena@gmail.com | samples / owner (2026-11-18) |
 | Prices | GST-inclusive | samples |
 | HSN / rate | 7117 (imitation jewellery) @ 3%, all products | owner, CA-confirmed |
 | Numbering | Website series `AJ/26-27/0001…` runs alongside the billing app's own series (#95, #99, …). Separate consecutive series are permitted (Rule 46(b)); the counter is **not** moved. | |

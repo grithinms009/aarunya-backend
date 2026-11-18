@@ -31,7 +31,7 @@ const FACTS = {
   tradeName: 'Aarunya Jewels by Veena',
   address: { line1: 'Edappon', line2: '', city: 'Mavelikara, Alappuzha', pin: '690558' },
   phone: '9747738193',
-  email: 'Aarunyajewelsbyveena@gmail.com',
+  email: 'Click2veena@gmail.com',
   priceMode: 'inclusive',
 };
 const HSN = '7117';

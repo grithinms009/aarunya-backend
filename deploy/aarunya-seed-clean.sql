@@ -929,7 +929,6 @@ COPY public.announcement (id, text, sort_order) FROM stdin;
 1	Free shipping on orders above ₹499	0
 2	Pan-India delivery	1
 3	Easy 3-day returns	2
-4	Order before 4 PM for same-day dispatch	3
 5	Handpicked in Kerala by Veena	4
 \.
 
